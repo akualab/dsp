@@ -11,7 +11,7 @@ func TestBasic(t *testing.T) {
 
 	app := NewApp("Test", 1000)
 
-	p1 := Random(4, 10)
+	p1 := Source(4, 10).Use(NewNormal(88, 10, 2))
 
 	w1 := app.MakeWire()
 	app.Connect(p1, w1)
