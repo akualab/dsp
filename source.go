@@ -79,19 +79,39 @@ func (n *Normal) Next() float64 {
 	return n.r.NormFloat64()*n.sd + n.mean
 }
 
-// Random emits a finite sequence of random vectors.
-// size is the size of the vector.
-// length is the length of the sequence.
-// func Random(size, length int) Processor {
-// 	return ProcFunc(func(arg Arg) error {
-// 		r := rand.New(rand.NewSource(99))
-// 		for i := 0; i < length; i++ {
-// 			v := make(Value, size, size)
-// 			for j := 0; j < size; j++ {
-// 				v[j] = r.Float64()
-// 			}
-// 			arg.Out <- v
-// 		}
-// 		return nil
-// 	})
-// }
+// Returns a suare signal.
+type Square struct {
+	// Num samples with high values.
+	HighDuration int
+	// Num samples with low values.
+	LowDuration int
+	// High value.
+	High float64
+	// Low value.
+	Low   float64
+	state int
+}
+
+// Returns square generator.
+func NewSquare(high, low float64, highDur, lowDur int) *Square {
+
+	return &Square{
+		High:         high,
+		Low:          low,
+		HighDuration: highDur,
+		LowDuration:  lowDur,
+	}
+}
+
+func (s *Square) Next() float64 {
+
+	v := s.Low
+	size := s.HighDuration + s.LowDuration
+	s.state = s.state % size
+
+	if s.state < s.HighDuration {
+		v = s.High
+	}
+	s.state++
+	return v
+}

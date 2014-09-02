@@ -14,23 +14,22 @@ const (
 
 type WindowProc struct {
 	WinSize    int
-	StepSize   int
 	WindowType int
 	data       []float64
 	err        error
 }
 
 // Returns a Windowing processor with a rectangular shape.
-func Window(winSize, stepSize int) *WindowProc {
+func Window(winSize int) *WindowProc {
 	return &WindowProc{
 		WinSize:    winSize,
-		StepSize:   stepSize,
 		WindowType: Rectangular,
 	}
 }
 
 func (win *WindowProc) Use(windowType int) *WindowProc {
 
+	win.WindowType = windowType
 	switch windowType {
 
 	case Rectangular:
@@ -54,12 +53,24 @@ func (win *WindowProc) RunProc(arg Arg) error {
 		return win.err
 	}
 
-	if win.WindowType == Rectangular {
+	for in := range arg.In[0] {
 
-		return nil
+		inSize := len(in)
+		if win.WinSize > inSize {
+			return fmt.Errorf("window size [%d] is larger than input vector size [%d]", win.WinSize, inSize)
+		}
+		v := make(Value, win.WinSize, win.WinSize)
+		if win.WindowType == Rectangular {
+			copy(v, in)
+		} else {
+			// Multiply by data in slice.
+			for i, _ := range win.data {
+				v[i] = in[i] * win.data[i]
+			}
+		}
+		arg.Out <- v
 	}
-
-	// Multiply by data in slice.
+	return nil
 }
 
 // Returns a Hanning window.

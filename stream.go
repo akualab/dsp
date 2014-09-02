@@ -56,7 +56,7 @@ func (app *App) Error() error {
 	return app.e.getError()
 }
 
-func (app *App) MakeWire() chan Value {
+func (app *App) Wire() chan Value {
 	return make(chan Value, app.BufferSize)
 }
 

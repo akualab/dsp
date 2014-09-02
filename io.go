@@ -10,13 +10,15 @@ import (
 // writer; and in addition it emits v.  Therefore WriteValues()
 // can be used like the "tee" command, which can often be useful
 // for debugging.
-func WriteValues(writer io.Writer) Processor {
+func WriteValues(writer io.Writer, on bool) Processor {
 	return ProcFunc(func(arg Arg) error {
 		b := bufio.NewWriter(writer)
 		for v := range arg.In[0] {
-			s := fmt.Sprintf("%v\n", v)
-			if _, err := b.Write([]byte(s)); err != nil {
-				return err
+			if on {
+				s := fmt.Sprintf("%v\n", v)
+				if _, err := b.Write([]byte(s)); err != nil {
+					return err
+				}
 			}
 			arg.Out <- v
 		}
