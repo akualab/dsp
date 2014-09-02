@@ -13,7 +13,7 @@ import (
 func WriteValues(writer io.Writer) Processor {
 	return ProcFunc(func(arg Arg) error {
 		b := bufio.NewWriter(writer)
-		for v := range arg.In {
+		for v := range arg.In[0] {
 			s := fmt.Sprintf("%v\n", v)
 			if _, err := b.Write([]byte(s)); err != nil {
 				return err

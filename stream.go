@@ -4,6 +4,9 @@ import "sync"
 
 type Value []float64
 
+type Output chan<- Value // can only send to the channel
+type Input <-chan Value  // can only receive from the channel
+
 type Processor interface {
 	RunProc(Arg) error
 }
@@ -12,8 +15,8 @@ type Processor interface {
 // produce the inputs to the processor, and Arg.Out is a slice of channels that
 // receive the outputs from the processor.
 type Arg struct {
-	In  <-chan Value
-	Out chan<- Value
+	In  []Input //[]<-chan Value
+	Out Output  //chan<- Value
 }
 
 // ProcFunc is an adapter type that allows the use of ordinary
@@ -24,13 +27,37 @@ type ProcFunc func(Arg) error
 // RunProc calls this function. It implements the Processer interface.
 func (f ProcFunc) RunProc(arg Arg) error { return f(arg) }
 
-const channelBuffer = 1000
-
 func runProc(p Processor, arg Arg, e *procErrors) {
 	e.record(p.RunProc(arg))
 	close(arg.Out)
-	for _ = range arg.In { // Discard all unhandled input
+	//	for _ = range arg.In { // Discard all unhandled input
+	//	}
+}
+
+type App struct {
+	Name       string
+	BufferSize int
+	e          *procErrors
+}
+
+func NewApp(name string, bufferSize int) *App {
+
+	return &App{Name: name,
+		e:          &procErrors{},
+		BufferSize: bufferSize,
 	}
+}
+
+func (app *App) Connect(p Processor, out Output, ins ...Input) {
+	go runProc(p, Arg{Out: out, In: ins}, app.e)
+}
+
+func (app *App) Error() error {
+	return app.e.getError()
+}
+
+func (app *App) MakeWire() chan Value {
+	return make(chan Value, app.BufferSize)
 }
 
 // procErrors records errors accumulated during the execution of a processor.

@@ -9,21 +9,20 @@ import (
 
 func TestBasic(t *testing.T) {
 
-	e := &procErrors{}
+	app := NewApp("Test", 1000)
+
 	p1 := Random(4, 10)
 
-	in := make(chan Value)
-	close(in)
-	c1 := make(chan Value, channelBuffer)
-	go runProc(p1, Arg{In: in, Out: c1}, e)
+	w1 := app.MakeWire()
+	app.Connect(p1, w1)
 
 	p2 := WriteValues(os.Stdout)
-	c2 := make(chan Value, channelBuffer)
-	go runProc(p2, Arg{In: c1, Out: c2}, e)
+	w2 := app.MakeWire()
+	app.Connect(p2, w2, w1)
 
-	for v := range c2 {
+	for v := range w2 {
 		_ = v
 	}
 
-	fmt.Println("error:", e.getError())
+	fmt.Println("error:", app.Error())
 }
