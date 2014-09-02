@@ -1,4 +1,4 @@
-package stream
+package dsp
 
 import (
 	"fmt"
@@ -46,7 +46,7 @@ func (win *WindowProc) Use(windowType int) *WindowProc {
 	return win
 }
 
-// Implements the stream.Processor interface.
+// Implements the dsp.Processor interface.
 func (win *WindowProc) RunProc(arg Arg) error {
 
 	if win.err != nil {

@@ -1,4 +1,4 @@
-package stream
+package dsp
 
 import "math/rand"
 
@@ -30,7 +30,7 @@ func (s *SourceProc) Use(nr NumberReader) *SourceProc {
 	return s
 }
 
-// Implements the stream.Processor interface.
+// Implements the dsp.Processor interface.
 func (s *SourceProc) RunProc(arg Arg) error {
 	for i := 0; i < s.length; i++ {
 		v := make(Value, s.size, s.size)
