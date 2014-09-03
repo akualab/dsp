@@ -73,7 +73,8 @@ func (win *WindowProc) RunProc(arg Arg) error {
 				v[i] = in[i] * win.data[i]
 			}
 		}
-		arg.Out <- v
+		//arg.Out <- v
+		SendValue(v, arg)
 	}
 	return nil
 }

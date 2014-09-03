@@ -63,8 +63,8 @@ type Processor interface {
 // produce the inputs to the processor, and Arg.Out is a slice of channels that
 // receive the outputs from the processor.
 type Arg struct {
-	In  []FromChan //[]<-chan Value
-	Out ToChan     //chan<- Value
+	In  []FromChan // []<-chan Value
+	Out []ToChan   // chan<- Value
 }
 
 // ProcFunc is an adapter type that allows the use of ordinary
@@ -77,7 +77,8 @@ func (f ProcFunc) RunProc(arg Arg) error { return f(arg) }
 
 func runProc(p Processor, arg Arg, e *procErrors) {
 	e.record(p.RunProc(arg))
-	close(arg.Out)
+	//close(arg.Out)
+	CloseOutputs(arg)
 }
 
 // Sequence returns a processor that is the concatenation of all processor arguments.
@@ -90,11 +91,12 @@ func (app *App) Sequence(procs ...Processor) Processor {
 		in := arg.In[0]
 		for _, p := range procs {
 			c := app.Wire()
-			app.Connect(p, c, in)
+			app.Connect(p, MakeArg(in, c))
 			in = c
 		}
 		for v := range in {
-			arg.Out <- v
+			//arg.Out <- v
+			SendValue(v, arg)
 		}
 		return app.Error()
 	})
@@ -107,7 +109,7 @@ func (app *App) Run(procs ...Processor) FromChan {
 	in := app.Wire()
 	close(in)
 	out := app.Wire()
-	app.Connect(p, out, in)
+	app.Connect(p, Arg{[]FromChan{in}, []ToChan{out}})
 
 	return out
 }
@@ -129,10 +131,14 @@ func NewApp(name string, bufferSize int) *App {
 	}
 }
 
-// Connects output and input channels to a processor and activates
-// the processor.
-func (app *App) Connect(p Processor, out ToChan, ins ...FromChan) {
-	go runProc(p, Arg{Out: out, In: ins}, app.e)
+// Connects multiple inputs and outputs to a processor.
+func (app *App) Connect(p Processor, arg Arg) {
+	go runProc(p, Arg{Out: arg.Out, In: arg.In}, app.e)
+}
+
+// Connects multiple inputs and one output to a processor.
+func (app *App) ConnectOne(p Processor, out ToChan, ins ...FromChan) {
+	go runProc(p, Arg{Out: []ToChan{out}, In: ins}, app.e)
 }
 
 // Returns error if any.
@@ -143,6 +149,26 @@ func (app *App) Error() error {
 // Creates a channel for wiring processors.
 func (app *App) Wire() chan Value {
 	return make(chan Value, app.BufferSize)
+}
+
+// Closes all the output channels.
+func CloseOutputs(arg Arg) {
+	for _, out := range arg.Out {
+		close(out)
+	}
+}
+
+// Sends a value to all the output channels.
+func SendValue(v Value, arg Arg) {
+
+	for _, out := range arg.Out {
+		out <- v
+	}
+}
+
+// Creates an Arg with a single input and output.
+func MakeArg(in FromChan, out ToChan) Arg {
+	return Arg{[]FromChan{in}, []ToChan{out}}
 }
 
 // procErrors records errors accumulated during the execution of a processor.

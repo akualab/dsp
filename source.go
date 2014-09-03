@@ -42,7 +42,8 @@ func (s *SourceProc) RunProc(arg Arg) error {
 		for j := 0; j < s.size; j++ {
 			v[j] = s.nr.Next()
 		}
-		arg.Out <- v
+		//arg.Out <- v
+		SendValue(v, arg)
 	}
 	return nil
 }

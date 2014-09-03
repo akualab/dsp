@@ -25,7 +25,8 @@ func WriteValues(writer io.Writer, on bool) Processor {
 					return err
 				}
 			}
-			arg.Out <- v
+			SendValue(v, arg)
+			//arg.Out <- v
 		}
 		return b.Flush()
 	})
