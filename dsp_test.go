@@ -49,6 +49,10 @@ func TestWindow(t *testing.T) {
 	w3 := app.Wire()
 	app.Connect(p3, w3, w2)
 
+	if app.Error() != nil {
+		t.Fatalf("error: %s", app.Error())
+	}
+
 	// get a vector
 	v := <-w3
 
@@ -66,8 +70,38 @@ func TestWindow(t *testing.T) {
 	actual = v[57]
 	expected = hamming[57]
 	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
+}
+
+func TestChain(t *testing.T) {
+
+	app := NewApp("Test Chain", 1000)
+
+	out := app.Run(
+		Source(64, 2).Use(NewSquare(1, 0, 4, 4)),
+		Window(64).Use(Hamming),
+		WriteValues(os.Stdout, testing.Verbose()),
+	)
 
 	if app.Error() != nil {
 		t.Fatalf("error: %s", app.Error())
 	}
+
+	// get a vector
+	v := <-out
+
+	// check value
+	hamming := HammingWindow(64)
+
+	actual := v[0]
+	expected := hamming[0]
+	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
+
+	actual = v[4]
+	expected = 0.0
+	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
+
+	actual = v[57]
+	expected = hamming[57]
+	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
+
 }
