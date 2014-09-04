@@ -45,6 +45,11 @@ inputs and will generate multiple outputs.
 For example:
 
 
+CREDITS:
+
+I adapted the design from https://github.com/ghemawat/stream by Sanjay Ghemawat.
+Package stream is designed to process streams of text by chaining filters.
+
 */
 package dsp
 
