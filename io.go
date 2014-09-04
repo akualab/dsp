@@ -76,6 +76,7 @@ func NewReader(frameSize int) *ReaderConfig {
 func Reader(reader io.Reader, config *ReaderConfig) Processor {
 	return ProcFunc(func(arg Arg) error {
 
+		var splitFunc bufio.SplitFunc
 		if config.StepSize > config.FrameSize {
 			return fmt.Errorf("bad step size [%d] is greater than frame size [%d]", config.StepSize, config.FrameSize)
 		}
@@ -87,40 +88,46 @@ func Reader(reader io.Reader, config *ReaderConfig) Processor {
 		switch config.ValueType {
 
 		case Text:
-			scanner := bufio.NewScanner(b)
-			scanner.Split(bufio.ScanWords)
-
-			i := ovs
-			for scanner.Scan() {
-				v, e := strconv.ParseFloat(scanner.Text(), 64)
-				if e != nil {
-					return e
-				}
-				frame[i] = v
-				i++
-				if i >= fs {
-					// Pad with overlap data
-					copy(frame[0:ovs], overlap)
-					// Save overlap dat for next frame.
-					copy(overlap, frame[config.StepSize:])
-					// Frame ready, send out.
-					SendValue(frame, arg)
-					// Prepare for next frame.
-					i = ovs
-					frame = make(Value, fs, fs)
-				}
-			}
-			if err := scanner.Err(); err != nil {
-				fmt.Fprintln(os.Stderr, "reading input:", err)
-			}
-
+			splitFunc = bufio.ScanWords
 		case Float64:
+			return fmt.Errorf("type: %d not implemented", config.ValueType)
 		case Float32:
+			return fmt.Errorf("type: %d not implemented", config.ValueType)
 		case Int32:
+			return fmt.Errorf("type: %d not implemented", config.ValueType)
 		case Int16:
+			return fmt.Errorf("type: %d not implemented", config.ValueType)
 		case Int8:
+			return fmt.Errorf("type: %d not implemented", config.ValueType)
 		default:
 			return fmt.Errorf("unknown value type: %d", config.ValueType)
+		}
+
+		scanner := bufio.NewScanner(b)
+		scanner.Split(splitFunc)
+
+		i := ovs
+		for scanner.Scan() {
+			v, e := strconv.ParseFloat(scanner.Text(), 64)
+			if e != nil {
+				return e
+			}
+			frame[i] = v
+			i++
+			if i >= fs {
+				// Pad with overlap data
+				copy(frame[0:ovs], overlap)
+				// Save overlap dat for next frame.
+				copy(overlap, frame[config.StepSize:])
+				// Frame ready, send out.
+				SendValue(frame, arg)
+				// Prepare for next frame.
+				i = ovs
+				frame = make(Value, fs, fs)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintln(os.Stderr, "reading input:", err)
 		}
 
 		return nil
