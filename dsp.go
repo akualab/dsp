@@ -45,6 +45,9 @@ inputs and will generate multiple outputs.
 For example:
 
 
+Input values should be treated as read-only because they may be shared with other processors.
+To create a copy, use newValue = inputValue.Copy().
+
 CREDITS:
 
 I adapted the design from https://github.com/ghemawat/stream by Sanjay Ghemawat.
@@ -56,6 +59,15 @@ package dsp
 import "sync"
 
 type Value []float64
+
+// Creates a copy of teh value.
+// Input values should be treated as read-only because
+// they may be shared with other processors.
+func (v Value) Copy() Value {
+	vcopy := make(Value, len(v), len(v))
+	copy(vcopy, v)
+	return vcopy
+}
 
 type ToChan chan<- Value   // can only send to the channel
 type FromChan <-chan Value // can only receive from the channel
@@ -82,7 +94,6 @@ func (f ProcFunc) RunProc(arg Arg) error { return f(arg) }
 
 func runProc(p Processor, arg Arg, e *procErrors) {
 	e.record(p.RunProc(arg))
-	//close(arg.Out)
 	CloseOutputs(arg)
 }
 

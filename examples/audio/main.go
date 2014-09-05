@@ -7,14 +7,35 @@ import (
 	"github.com/akualab/dsp"
 )
 
+/* Configuration parameters. */
+const (
+	windowSize     = 205
+	windowStep     = 80
+	fftSize        = 256
+	filterbankSize = 18
+	cepstrumSize   = 8
+)
+
 func main() {
 
 	app := dsp.NewApp("Test Chain", 1000)
 
+	r, err := os.Open("data/audio-rec-8k.txt")
+	if err != nil {
+		panic(err)
+	}
+
+	c := &dsp.ReaderConfig{
+		FrameSize: windowSize,
+		StepSize:  windowStep,
+		ValueType: dsp.Text,
+	}
+
+	print := true
 	out := app.Run(
-		dsp.Source(64, 2).Use(dsp.NewSquare(1, 0, 4, 4)),
-		dsp.Window(64).Use(dsp.Hamming),
-		dsp.WriteValues(os.Stdout, true),
+		dsp.Reader(r, c),                        // Read audio data from file.
+		dsp.Window(windowSize).Use(dsp.Hamming), // Applies Hamming window to frame.
+		dsp.WriteValues(os.Stdout, print),       // Writes to stdout.
 	)
 
 	if app.Error() != nil {
@@ -22,6 +43,12 @@ func main() {
 	}
 
 	// get a vector
-	_ = <-out
+	for v := range out {
+		_ = v
+	}
 
+	err = r.Close()
+	if err != nil {
+		panic(err)
+	}
 }
