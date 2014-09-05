@@ -54,7 +54,22 @@ func TestTextReader(t *testing.T) {
 		t.Fatalf("error: %s", app.Error())
 	}
 
-	for v := range out {
-		_ = v
-	}
+	//	for v := range out {
+	//		_ = v
+	//	}
+
+	v := <-out
+	actual := v[3]
+	expected := 1.0
+	CompareFloats(t, expected, actual, "mismatched values", 0.01)
+
+	v = <-out
+	actual = v[1]
+	expected = 1.0
+	CompareFloats(t, expected, actual, "mismatched values", 0.01)
+
+	v = <-out
+	actual = v[4]
+	expected = 6.0
+	CompareFloats(t, expected, actual, "mismatched values", 0.01)
 }
