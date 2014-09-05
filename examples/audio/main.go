@@ -11,7 +11,7 @@ import (
 const (
 	windowSize     = 205
 	windowStep     = 80
-	fftSize        = 256
+	logFFTSize     = 8
 	filterbankSize = 18
 	cepstrumSize   = 8
 )
@@ -35,6 +35,7 @@ func main() {
 	out := app.Run(
 		dsp.Reader(r, c),                        // Read audio data from file.
 		dsp.Window(windowSize).Use(dsp.Hamming), // Applies Hamming window to frame.
+		dsp.SpectralEnergy(logFFTSize),          // Spectral Energy
 		dsp.WriteValues(os.Stdout, print),       // Writes to stdout.
 	)
 

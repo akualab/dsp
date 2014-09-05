@@ -52,3 +52,24 @@ func Cat() Processor {
 		return nil
 	})
 }
+
+// Computes the real FFT energy of the input frame.
+// See dsp.RealFT and dsp.DFTEnergy for details.
+// output frame size will be 2^logSize
+// the real fft size computed is 2 * frame_size
+func SpectralEnergy(logSize uint) Processor {
+	fs := 1 << logSize // output frame size
+	dftSize := 2 * fs
+	return ProcFunc(func(arg Arg) error {
+
+		for data := range arg.In[0] {
+			dft := make(Value, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
+			copy(dft, data)                      // zero padded
+			RealFT(dft, dftSize, true)
+			egy := DFTEnergy(dft)
+			SendValue(egy, arg)
+		}
+
+		return nil
+	})
+}

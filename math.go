@@ -116,20 +116,22 @@ Output is stored in the same array using a strange scheme. The
 first value is the Re{DFT[0]}, the second value is Re{DFT[N-1]}.
 Example (all values rounded to first decimal):
 
-     Real Input sequence N=16:
-     0.5 1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
-     Real DFT:
-     real[k] sum_n {inArray[n] * cos(alpha * k * n)}
-      1.5 1.4 1.2 0.9 0.5 0.1 -0.2 -0.4 -0.5 -0.4 -0.2 0.1 0.5 0.9 1.2 1.4
-     Imag DFT:
-     imag[k] sum_n {-inArray[n] * sin(alpha * k * n)}
-      0.0 -0.4 -0.7 -0.9 -1.0 -0.9 -0.7 -0.4 0.0 0.4 0.7 0.9 1.0 0.9 0.7 0.4
+  Real Input sequence N=16:
+   0.5 1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
 
-     realft returns:
-      1.5 -0.5 1.4 0.4 1.2 0.7 0.9 0.9 0.5 1.0 0.1 0.9 -0.2 0.7 -0.4 0.4
-      Re   Re  Re  Im  Re  Im  Re  Im  Re  Im  Re  Im   Re  Im   Re  Im
-      n=0  n=8 n=7 n=7 n=6 n=6 n=5 n=5 n=4 n=4 n=3 n=3  n=2 n=2  n=1 n=1
-      The first 2 components are real values. The rest of the pairs are {Re, Im}
+  Real DFT (rounded values):
+   real[k] sum_n {inArray[n] * cos(alpha * k * n)}
+   1.5 1.4 1.2 0.9 0.5 0.1 -0.2 -0.4 -0.5 -0.4 -0.2 0.1 0.5 0.9 1.2 1.4
+
+  Imag DFT (rounded values):
+   imag[k] sum_n {-inArray[n] * sin(alpha * k * n)}
+   0.0 -0.4 -0.7 -0.9 -1.0 -0.9 -0.7 -0.4 0.0 0.4 0.7 0.9 1.0 0.9 0.7 0.4
+
+  realft returns:
+   1.5 -0.5 1.4 0.4 1.2 0.7 0.9 0.9 0.5 1.0 0.1 0.9 -0.2 0.7 -0.4 0.4
+   Re   Re  Re  Im  Re  Im  Re  Im  Re  Im  Re  Im   Re  Im   Re  Im
+   n=0  n=8 n=7 n=7 n=6 n=6 n=5 n=5 n=4 n=4 n=3 n=3  n=2 n=2  n=1 n=1
+   The first 2 components are real values. The rest of the pairs are {Re, Im}
 
 data is the input array of length n.
 n the length of the discrete signal.
@@ -185,7 +187,7 @@ func RealFT(data []float64, n int, direct bool) {
 }
 
 /*
-Compute DFT energy.
+Compute DFT energy vector.
 The size of the energy array should be half of the input array.
 
      For the example in RealFT, the output would be:
@@ -196,11 +198,14 @@ The size of the energy array should be half of the input array.
 dft is the discrete Fourier transform. (See RealfFT for format.)
 energy is the energy values for the DFT.
 */
-func DFTEnergy(dft []float64, energy []float64) {
+func DFTEnergy(dft []float64) []float64 {
 
 	size := len(dft) / 2
+	energy := make([]float64, size, size)
+
 	energy[0] = dft[0] * dft[0]
 	for i := 1; i < size; i++ {
 		energy[i] = dft[2*i]*dft[2*i] + dft[2*i+1]*dft[2*i+1]
 	}
+	return energy
 }
