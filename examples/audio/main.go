@@ -32,11 +32,19 @@ func main() {
 	}
 
 	print := true
+
+	// Create a processor to compute mel-cepstrum. We chain various processors.
+	cepstrum := app.Sequence(
+		dsp.Reader(r, c),
+		dsp.Window(windowSize).Use(dsp.Hamming),
+		dsp.SpectralEnergy(logFFTSize),
+		dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients),
+		dsp.Log(),
+		dsp.WriteValues(os.Stdout, print),
+	)
+
 	out := app.Run(
-		dsp.Reader(r, c),                        // Read audio data from file.
-		dsp.Window(windowSize).Use(dsp.Hamming), // Applies Hamming window to frame.
-		dsp.SpectralEnergy(logFFTSize),          // Spectral Energy
-		dsp.WriteValues(os.Stdout, print),       // Writes to stdout.
+		cepstrum,
 	)
 
 	if app.Error() != nil {

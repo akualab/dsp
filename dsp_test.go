@@ -114,8 +114,8 @@ func TestTwoWindows(t *testing.T) {
 
 	w1a := app.Wire()
 	w1b := app.Wire()
-	arg := Arg{Out: []ToChan{w1a, w1b}}
-	app.Connect(p1, arg)
+	pio := PIO{Out: []ToChan{w1a, w1b}}
+	app.Connect(p1, pio)
 
 	p2a := Window(64).Use(Hamming)
 	w2a := app.Wire()

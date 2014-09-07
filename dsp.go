@@ -73,28 +73,38 @@ type ToChan chan<- Value   // can only send to the channel
 type FromChan <-chan Value // can only receive from the channel
 
 type Processor interface {
-	RunProc(Arg) error
+	RunProc(PIO) error
 }
 
-// Arg contains the data passed to a Processor. Arg.In is a slice of channels that
-// produce the inputs to the processor, and Arg.Out is a slice of channels that
-// receive the outputs from the processor.
-type Arg struct {
+// Processor IO (PIO) has the processor input and output channels.
+// Slice PIO.In has channels that send values to the processor.
+// Slice PIO.Out has channels that send values from the processor.
+type PIO struct {
 	In  []FromChan // []<-chan Value
 	Out []ToChan   // chan<- Value
+}
+
+// Adds an output channel to processor.
+func (pio *PIO) AddOut(out ToChan) {
+	pio.Out = append(pio.Out, out)
+}
+
+// Adds an input channel to processor.
+func (pio *PIO) AddIn(in FromChan) {
+	pio.In = append(pio.In, in)
 }
 
 // ProcFunc is an adapter type that allows the use of ordinary
 // functions as Processors.  If f is a function with the appropriate
 // signature, FilterFunc(f) is a Processor that calls f.
-type ProcFunc func(Arg) error
+type ProcFunc func(PIO) error
 
 // RunProc calls this function. It implements the Processer interface.
-func (f ProcFunc) RunProc(arg Arg) error { return f(arg) }
+func (f ProcFunc) RunProc(pio PIO) error { return f(pio) }
 
-func runProc(p Processor, arg Arg, e *procErrors) {
-	e.record(p.RunProc(arg))
-	CloseOutputs(arg)
+func runProc(p Processor, pio PIO, e *procErrors) {
+	e.record(p.RunProc(pio))
+	CloseOutputs(pio)
 }
 
 // Sequence returns a processor that is the concatenation of all processor arguments.
@@ -103,16 +113,15 @@ func (app *App) Sequence(procs ...Processor) Processor {
 	if len(procs) == 1 {
 		return procs[0]
 	}
-	return ProcFunc(func(arg Arg) error {
-		in := arg.In[0]
+	return ProcFunc(func(pio PIO) error {
+		in := pio.In[0]
 		for _, p := range procs {
 			c := app.Wire()
-			app.Connect(p, MakeArg(in, c))
+			app.Connect(p, MakePIO(in, c))
 			in = c
 		}
 		for v := range in {
-			//arg.Out <- v
-			SendValue(v, arg)
+			SendValue(v, pio)
 		}
 		return app.Error()
 	})
@@ -125,7 +134,7 @@ func (app *App) Run(procs ...Processor) FromChan {
 	in := app.Wire()
 	close(in)
 	out := app.Wire()
-	app.Connect(p, Arg{[]FromChan{in}, []ToChan{out}})
+	app.Connect(p, PIO{[]FromChan{in}, []ToChan{out}})
 
 	return out
 }
@@ -148,13 +157,13 @@ func NewApp(name string, bufferSize int) *App {
 }
 
 // Connects multiple inputs and outputs to a processor.
-func (app *App) Connect(p Processor, arg Arg) {
-	go runProc(p, Arg{Out: arg.Out, In: arg.In}, app.e)
+func (app *App) Connect(p Processor, pio PIO) {
+	go runProc(p, PIO{Out: pio.Out, In: pio.In}, app.e)
 }
 
 // Connects multiple inputs and one output to a processor.
 func (app *App) ConnectOne(p Processor, out ToChan, ins ...FromChan) {
-	go runProc(p, Arg{Out: []ToChan{out}, In: ins}, app.e)
+	go runProc(p, PIO{Out: []ToChan{out}, In: ins}, app.e)
 }
 
 // Returns error if any.
@@ -168,23 +177,23 @@ func (app *App) Wire() chan Value {
 }
 
 // Closes all the output channels.
-func CloseOutputs(arg Arg) {
-	for _, out := range arg.Out {
+func CloseOutputs(pio PIO) {
+	for _, out := range pio.Out {
 		close(out)
 	}
 }
 
 // Sends a value to all the output channels.
-func SendValue(v Value, arg Arg) {
+func SendValue(v Value, pio PIO) {
 
-	for _, out := range arg.Out {
+	for _, out := range pio.Out {
 		out <- v
 	}
 }
 
-// Creates an Arg with a single input and output.
-func MakeArg(in FromChan, out ToChan) Arg {
-	return Arg{[]FromChan{in}, []ToChan{out}}
+// Creates a PIO with a single input and output.
+func MakePIO(in FromChan, out ToChan) PIO {
+	return PIO{[]FromChan{in}, []ToChan{out}}
 }
 
 // procErrors records errors accumulated during the execution of a processor.

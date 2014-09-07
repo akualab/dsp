@@ -1,10 +1,6 @@
 package dsp
 
-import (
-	"math"
-
-	mat "github.com/gonum/matrix/mat64"
-)
+import "math"
 
 /*
 Generate the Discrete Cosine Transform.
@@ -24,13 +20,14 @@ Generate the Discrete Cosine Transform.
      T(N-1,0) T(N-1,1) T(N-1,2) ... T(N-1,M-1)
 
 */
-func DCT(N, M int) *mat.Dense {
+func GenerateDCT(N, M int) [][]float64 {
 
-	dct := mat.NewDense(N, M, nil)
+	dct := make([][]float64, N, N)
 
 	for i := 0; i < N; i++ {
+		dct[i] = make([]float64, M, M)
 		for j := 0; j < M; j++ {
-			dct.Set(i, j, math.Cos(float64(i)*(2.0*float64(j)+1.0)*math.Pi/float64(M)))
+			dct[i][j] = math.Cos(float64(i) * (2.0*float64(j) + 1.0) * math.Pi / float64(M))
 		}
 	}
 	return dct
