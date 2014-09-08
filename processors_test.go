@@ -29,15 +29,16 @@ func TestAddScaled(t *testing.T) {
 	w3 := app.Wire()
 	w4 := app.Wire()
 
-	pio1 := PIO{Out: []ToChan{w1}}
-	app.Connect(p1, pio1)
+	out1 := Out{To: []ToChan{w1}}
+	app.Connect(p1, In{}, out1)
 
-	pio2 := PIO{Out: []ToChan{w2}}
-	app.Connect(p2, pio2)
+	out2 := Out{To: []ToChan{w2}}
+	app.Connect(p2, In{}, out2)
 
-	pio3 := PIO{Out: []ToChan{w3}, In: []FromChan{w1, w2}}
-	app.Connect(p3, pio3)
+	//	Connect two inputs and one output.
+	app.ConnectOne(p3, w3, w1, w2)
 
+	//	Connect one inputs and one output.
 	app.ConnectOne(p4, w4, w3)
 
 	if app.Error() != nil {
@@ -74,15 +75,11 @@ func TestJoin(t *testing.T) {
 	w3 := app.Wire()
 	w4 := app.Wire()
 
-	pio1 := PIO{Out: []ToChan{w1}}
-	app.Connect(p1, pio1)
-
-	pio2 := PIO{Out: []ToChan{w2}}
-	app.Connect(p2, pio2)
-
-	pio3 := PIO{Out: []ToChan{w3}, In: []FromChan{w1, w2}}
-	app.Connect(p3, pio3)
-
+	out1 := Out{To: []ToChan{w1}}
+	app.Connect(p1, In{}, out1)
+	out2 := Out{To: []ToChan{w2}}
+	app.Connect(p2, In{}, out2)
+	app.ConnectOne(p3, w3, w1, w2)
 	app.ConnectOne(p4, w4, w3)
 
 	if app.Error() != nil {

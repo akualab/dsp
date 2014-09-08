@@ -52,13 +52,13 @@ func (win *WindowProc) Use(windowType int) *WindowProc {
 }
 
 // Implements the dsp.Processor interface.
-func (win *WindowProc) RunProc(pio PIO) error {
+func (win *WindowProc) RunProc(in In, out Out) error {
 
 	if win.err != nil {
 		return win.err
 	}
 
-	for in := range pio.In[0] {
+	for in := range in.From[0] {
 
 		inSize := len(in)
 		if win.WinSize > inSize {
@@ -74,7 +74,7 @@ func (win *WindowProc) RunProc(pio PIO) error {
 			}
 		}
 		//arg.Out <- v
-		SendValue(v, pio)
+		SendValue(v, out)
 	}
 	return nil
 }

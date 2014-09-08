@@ -36,14 +36,13 @@ func (s *SourceProc) Use(nr NumberReader) *SourceProc {
 }
 
 // Implements the dsp.Processor interface.
-func (s *SourceProc) RunProc(pio PIO) error {
+func (s *SourceProc) RunProc(in In, out Out) error {
 	for i := 0; i < s.length; i++ {
 		v := make(Value, s.size, s.size)
 		for j := 0; j < s.size; j++ {
 			v[j] = s.nr.Next()
 		}
-		//pio.Out <- v
-		SendValue(v, pio)
+		SendValue(v, out)
 	}
 	return nil
 }

@@ -32,17 +32,16 @@ const (
 // can be used like the "tee" command, which can often be useful
 // for debugging.
 func WriteValues(writer io.Writer, on bool) Processor {
-	return ProcFunc(func(pio PIO) error {
+	return ProcFunc(func(in In, out Out) error {
 		b := bufio.NewWriter(writer)
-		for v := range pio.In[0] {
+		for v := range in.From[0] {
 			if on {
 				s := fmt.Sprintf("%v\n", v)
 				if _, err := b.Write([]byte(s)); err != nil {
 					return err
 				}
 			}
-			SendValue(v, pio)
-			//pio.Out <- v
+			SendValue(v, out)
 		}
 		return b.Flush()
 	})
@@ -74,7 +73,7 @@ func NewReader(frameSize int) *ReaderConfig {
 
 // Processor to read values from an io.Reader interface.
 func Reader(reader io.Reader, config *ReaderConfig) Processor {
-	return ProcFunc(func(pio PIO) error {
+	return ProcFunc(func(in In, out Out) error {
 
 		var splitFunc bufio.SplitFunc
 		if config.StepSize > config.FrameSize {
@@ -120,7 +119,7 @@ func Reader(reader io.Reader, config *ReaderConfig) Processor {
 				// Save overlap dat for next frame.
 				copy(overlap, frame[config.StepSize:])
 				// Frame ready, send out.
-				SendValue(frame, pio)
+				SendValue(frame, out)
 				// Prepare for next frame.
 				i = ovs
 				frame = make(Value, fs, fs)
