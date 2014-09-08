@@ -25,8 +25,9 @@ type node struct {
 	n         graph.Node
 	name      string
 	proc      Processor
-	fromChans []chan Value //[]FromChan
-	toChans   []chan Value //[]ToChan
+	fromChans []chan Value   //[]FromChan
+	toChans   []chan Value   //[]ToChan
+	inputIdx  map[string]int // edge to input index
 }
 
 func (app *App) NewBuilder() *Builder {
@@ -45,13 +46,12 @@ func (app *App) NewBuilder() *Builder {
 func (b *Builder) Add(name string, p Processor) {
 	n := b.g.NewNode()
 	b.nodes[name] = &node{
-		n:    n,
-		name: name,
-		proc: p,
-		//		toChans:   []ToChan{},
-		toChans: [](chan Value){},
-		//		fromChans: []FromChan{},
+		n:         n,
+		name:      name,
+		proc:      p,
+		toChans:   [](chan Value){},
 		fromChans: [](chan Value){},
+		inputIdx:  make(map[string]int),
 	}
 	b.nodeByID[n] = b.nodes[name]
 }
@@ -80,6 +80,14 @@ func (b *Builder) EndNodeChan(name string) (chan Value, error) {
 
 // Adds a one way channel between two processors by name.
 func (b *Builder) Connect(from, to string) error {
+	return b.ConnectOrdered(from, to, -1)
+}
+
+// Adds a one way channel between two processors by name.
+// The input of the receiver node is specified with an index.
+// This is necessary for processors with multiple ordered inputs.
+// In most cases use Connect() instead.
+func (b *Builder) ConnectOrdered(from, to string, idx int) error {
 
 	var ok bool
 
@@ -95,7 +103,13 @@ func (b *Builder) Connect(from, to string) error {
 
 	edge := g.Edge{T: b.nodes[from].n, H: b.nodes[to].n}
 	b.g.AddDirectedEdge(edge, 1.0)
-
+	imap := b.nodes[to].inputIdx
+	k := fmt.Sprintf("%s-%s", edge.Tail(), edge.Head())
+	if idx >= 0 {
+		imap[k] = idx
+		return nil
+	}
+	imap[k] = len(imap) // auto-increment.
 	return nil
 }
 
@@ -107,7 +121,20 @@ func (b *Builder) Run() {
 		from := b.nodeByID[edge.Tail()]
 		to := b.nodeByID[edge.Head()]
 		ch := make(chan Value, b.App.BufferSize)
-		to.toChans = append(to.toChans, ch)
+
+		// We need to connect to a specific index in the input slice.
+		k := fmt.Sprintf("%s-%s", edge.Tail(), edge.Head())
+		idx := to.inputIdx[k] // the target input.
+		s := &to.toChans      // slice of input channels
+		if idx < len(*s) {
+			(*s)[idx] = ch // insert and done.
+		} else { // slice too short, augment.
+			for i := len(*s); i < idx; i++ {
+				*s = append(*s, nil) // fill out slice
+			}
+			*s = append(*s, ch) // insert as last element
+		}
+
 		from.fromChans = append(from.fromChans, ch)
 		log.Printf("add channel from [%s] to [%s]", from.name, to.name)
 	}
@@ -117,9 +144,15 @@ func (b *Builder) Run() {
 		node := b.nodeByID[nn]
 		in, out := NewIO()
 		for _, ch := range node.toChans {
+			if ch == nil {
+				fmt.Errorf("found a nil input channel in node %s - check the node connections", node.name)
+			}
 			in.Add(ch)
 		}
 		for _, ch := range node.fromChans {
+			if ch == nil {
+				fmt.Errorf("found a nil output channel in node %s - this should not happen, report teh bug", node.name)
+			}
 			out.Add(ch)
 		}
 		log.Printf("preparing to launch node [%s], in: %d, out: %d",

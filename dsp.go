@@ -37,13 +37,9 @@ A sequence of processors can be converted into a single composite processor as f
         dsp.WriteValues(os.Stdout, true),
 	)
 
-This can be useful to hide some complexity when building an app.
-
 A more realistic application will have processors with multiple
-inputs and will generate multiple outputs.
-
-For example:
-
+inputs and multiple outputs. The Builder functions provide a set of
+tools to create the application graph.
 
 Input values should be treated as read-only because they may be shared with other processors.
 To create a copy, use newValue = inputValue.Copy().

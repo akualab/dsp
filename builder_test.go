@@ -60,9 +60,9 @@ func TestBuilder(t *testing.T) {
 	b.AddEndNode("end")
 
 	var err error
-	err = b.Connect("reader 1", "combo")
+	err = b.ConnectOrdered("reader 1", "combo", 1)
 	CheckError(t, err)
-	err = b.Connect("reader 2", "combo")
+	err = b.ConnectOrdered("reader 2", "combo", 0)
 	CheckError(t, err)
 	err = b.Connect("combo", "writer")
 	CheckError(t, err)
