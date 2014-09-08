@@ -85,8 +85,10 @@ func (b *Builder) Connect(from, to string) error {
 
 // Adds a one way channel between two processors by name.
 // The input of the receiver node is specified with an index.
-// This is necessary for processors with multiple ordered inputs.
-// In most cases use Connect() instead.
+// The index must be in the range {0...N-1} where N is the number
+// of inputs.
+// Use this method when the processors has multiple inputs that
+// are not interchangeable. Otherwise, use Connect() instead.
 func (b *Builder) ConnectOrdered(from, to string, idx int) error {
 
 	var ok bool

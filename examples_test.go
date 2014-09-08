@@ -33,6 +33,10 @@ func ExampleBuilder() {
 	b.AddEndNode("end")
 
 	// The connections.
+	// ConnectOrdered() is only necessary when a processor
+	// has multiple inputs that are not interchangeable.
+	// AddScaled() has multiple inputs that are interchangeable.
+	// We could have used Connect() instead of ConnectOrdered().
 	// (Ommiting error checking for clarity.)
 	b.ConnectOrdered("reader 1", "combo", 1)
 	b.ConnectOrdered("reader 2", "combo", 0)
@@ -41,6 +45,8 @@ func ExampleBuilder() {
 	// Run the app.
 	b.Run()
 
+	// Get the output channel.
+	// Must be done after the app started.
 	ch, _ := b.EndNodeChan("end")
 	v := <-ch
 	fmt.Printf("in     = [%s]\n", input)

@@ -7,13 +7,39 @@
 Package dsp provides processors that can be chained together to build
 digital signal processing systems.
 
+Digital signals are represented as sequence of numbers where each number
+is associated with a disctrete time. Discrete time is represented as a
+squence of integers that can correspond to physycal time sampled at fixed
+time intervals.
+
+All operations are synchronous because all values must correspond to a discrete
+time. For example, given and operation such as x[n] = f[n-1] + g[n-2], the
+value x[4] is calculated using delayed values f[3] and g[2].
+
 Processors are chained together using channels. Processors send data of
-type Value which is a synonim of []float64. This is the only type allowed.
+type Value which is a synonim of []float64. In mathematical terms, all inputs
+and outputs are vectors. The dimension of the vectors is set by the processors
+using configuration parameters, teh dimension of the input vestors, or by any
+other method.
 
 Data is pushed from a source and results can be read from any processor
 in the chain.
 
-Procesors have a single output and zero or more inputs.
+Procesors have zero or more outputs and zero or more inputs.
+
+A processor with multiple outputs sends the send value to other processors.
+
+A processor with multiple inputs receive values from other processors. The inputs
+can be interchangeable (they all have the same behavior) or not internchangeable.
+
+Processors are connected using buffered channels of type (chan Value). A full channel
+will block incoming values. If the application graph is not properly built or the
+output values are not read, the application will eventually deadlock.
+
+While the operations are synchronous the underlying computation is asynchronous.
+Processors will consume input data and write outputs as long as they are not blocked.
+This approach makes it possible to do parallel processing in hosts with multiple
+CPUs. Processor must be go routine safe.
 
 The following example implements a simple pipeline where the output of a processor
 is the single input to the next processor:
@@ -26,10 +52,10 @@ is the single input to the next processor:
         dsp.WriteValues(os.Stdout, true),
 	)
 
-The processed vectors can be read from the "out" channel. As we can see all
+The processed vectors can be read from the "out" channel. In linear apps, all
 the wiring between processors is hidden.
 
-A sequence of processors can be converted into a single composite processor as follows:
+A pipeline can easily be converted into a single composite processor:
 
 	newProc := app.Sequence(
         dsp.Source(64, 2).Use(NewSquare(1, 0, 4, 4)),
@@ -39,15 +65,21 @@ A sequence of processors can be converted into a single composite processor as f
 
 A more realistic application will have processors with multiple
 inputs and multiple outputs. The Builder functions provide a set of
-tools to create the application graph.
+tools to create the application graph. See the examples.
 
-Input values should be treated as read-only because they may be shared with other processors.
-To create a copy, use newValue = inputValue.Copy().
+Convention: Input values should be treated as read-only because
+they may be shared with other processors.
+To quickly create a copy, do newValue = inputValue.Copy().
 
 CREDITS:
 
 I adapted the design from https://github.com/ghemawat/stream by Sanjay Ghemawat.
 Package stream is designed to process streams of text by chaining filters.
+
+CONTACT:
+
+Leo Neumeyer
+leo@akualab.com
 
 */
 package dsp
@@ -59,7 +91,7 @@ import (
 
 type Value []float64
 
-// Creates a copy of teh value.
+// Creates a copy of the value.
 // Input values should be treated as read-only because
 // they may be shared with other processors.
 func (v Value) Copy() Value {
@@ -71,6 +103,7 @@ func (v Value) Copy() Value {
 type ToChan chan<- Value   // can only send to the channel
 type FromChan <-chan Value // can only receive from the channel
 
+// Processors must implement this interface.
 type Processor interface {
 	RunProc(in In, out Out) error
 }
@@ -85,7 +118,6 @@ type Out struct {
 	To []ToChan // chan<- Value
 }
 
-// New IO
 // Returns a pair of initialized In and Out objects.
 func NewIO() (In, Out) {
 	return In{From: []FromChan{}}, Out{To: []ToChan{}}
@@ -113,10 +145,9 @@ func (in *In) Get(idx int) (FromChan, error) {
 // ProcFunc is an adapter type that allows the use of ordinary
 // functions as Processors.  If f is a function with the appropriate
 // signature, FilterFunc(f) is a Processor that calls f.
-//type ProcFunc func(In, Out) error
 type ProcFunc func(In, Out) error
 
-// RunProc calls this function. It implements the Processer interface.
+// RunProc calls this function. It implements the Processor interface.
 func (f ProcFunc) RunProc(in In, out Out) error { return f(in, out) }
 
 func runProc(p Processor, in In, out Out, e *procErrors) {
@@ -124,7 +155,8 @@ func runProc(p Processor, in In, out Out, e *procErrors) {
 	CloseOutputs(out)
 }
 
-// Sequence returns a processor that is the concatenation of all processor arguments.
+// Sequence is a helper method that returns a processor that is the
+// concatenation of all processor arguments.
 // The output of a processor is fed as input to the next processor.
 func (app *App) Sequence(procs ...Processor) Processor {
 	if len(procs) == 1 {
@@ -144,8 +176,8 @@ func (app *App) Sequence(procs ...Processor) Processor {
 	})
 }
 
-// Run executes the sequence of processors.
-// It returns either nil, an error if any filter reported an error.
+// Run executes a sequence of processors.
+// It returns either nil, an error if any processor reported an error.
 func (app *App) Run(procs ...Processor) FromChan {
 	p := app.Sequence(procs...)
 	in := app.Wire()
@@ -156,6 +188,7 @@ func (app *App) Run(procs ...Processor) FromChan {
 	return out
 }
 
+// A DSP application.
 type App struct {
 	// App name.
 	Name string
