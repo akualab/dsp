@@ -24,18 +24,12 @@ func TestBuilderSimple(t *testing.T) {
 	b := app.NewBuilder()
 	b.Add("reader 1", p1)
 	b.Add("writer", p2)
-	b.AddEndNode("end")
+	b.Tap("writer")
 
-	var err error
-	err = b.Connect("reader 1", "writer")
-	CheckError(t, err)
-	err = b.Connect("writer", "end")
-	CheckError(t, err)
+	b.Connect("reader 1", "writer")
 
 	b.Run()
-	var ch chan Value
-	ch, err = b.EndNodeChan("end")
-	CheckError(t, err)
+	ch := b.TapChan("writer")
 	_ = <-ch
 }
 
@@ -57,22 +51,14 @@ func TestBuilder(t *testing.T) {
 	b.Add("reader 2", p2)
 	b.Add("combo", p3)
 	b.Add("writer", p4)
-	b.AddEndNode("end")
+	b.Tap("writer")
 
-	var err error
-	err = b.ConnectOrdered("reader 1", "combo", 1)
-	CheckError(t, err)
-	err = b.ConnectOrdered("reader 2", "combo", 0)
-	CheckError(t, err)
-	err = b.Connect("combo", "writer")
-	CheckError(t, err)
-	err = b.Connect("writer", "end")
-	CheckError(t, err)
+	b.ConnectOrdered("reader 1", "combo", 1)
+	b.ConnectOrdered("reader 2", "combo", 0)
+	b.Connect("combo", "writer")
 
 	b.Run()
-	var ch chan Value
-	ch, err = b.EndNodeChan("end")
-	CheckError(t, err)
+	ch := b.TapChan("writer")
 	v := <-ch
 
 	actual := v[3]

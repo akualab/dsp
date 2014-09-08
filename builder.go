@@ -13,6 +13,8 @@ import (
 	g "github.com/gonum/graph/concrete"
 )
 
+const tapSuffix = " tap"
+
 // Helper to build complex application graphs.
 type Builder struct {
 	App      *App
@@ -43,7 +45,7 @@ func (app *App) NewBuilder() *Builder {
 }
 
 // Adds a processor with a name.
-func (b *Builder) Add(name string, p Processor) {
+func (b *Builder) Add(name string, p Processor) string {
 	n := b.g.NewNode()
 	b.nodes[name] = &node{
 		n:         n,
@@ -54,33 +56,41 @@ func (b *Builder) Add(name string, p Processor) {
 		inputIdx:  make(map[string]int),
 	}
 	b.nodeByID[n] = b.nodes[name]
+	return name
 }
 
-// Add output node.
-func (b *Builder) AddEndNode(name string) {
-	b.Add(name, nil)
+// Adds an output node with no processor.
+// An output channel will be available from node "name".
+func (b *Builder) Tap(name string) {
+	tapNodeName := fmt.Sprintf("%s%s", name, tapSuffix)
+	b.Add(tapNodeName, nil)
+	b.Connect(name, tapNodeName)
 }
 
-func (b *Builder) EndNodeChan(name string) (chan Value, error) {
+// Returns output channel from node.
+func (b *Builder) TapChan(name string) chan Value {
 
-	_, ok := b.nodes[name]
+	tapNodeName := fmt.Sprintf("%s%s", name, tapSuffix)
+
+	_, ok := b.nodes[tapNodeName]
 	if !ok {
-		return nil, fmt.Errorf("there is no processor named %s", name)
+		panic(fmt.Errorf("there is no end node conected from %s - use Tap(\"%s\") to create an end node", name, name))
 	}
 
-	if b.nodes[name].proc != nil {
-		return nil, fmt.Errorf("processor %s is not an end node", name)
+	if b.nodes[tapNodeName].proc != nil {
+		panic(fmt.Errorf("end node [%s] has a non-nil processor, this should not happen, report bug.", tapNodeName))
 	}
 
-	if len(b.nodes[name].toChans) == 0 {
-		return nil, fmt.Errorf("processor %s has no output channel, make sure there is a connection to this end node", name)
+	if len(b.nodes[tapNodeName].toChans) == 0 {
+		panic(fmt.Errorf("end node [%s] has no output channel, this should not happen, report bug", tapNodeName))
 	}
-	return b.nodes[name].toChans[0], nil
+	return b.nodes[tapNodeName].toChans[0]
 }
 
 // Adds a one way channel between two processors by name.
-func (b *Builder) Connect(from, to string) error {
-	return b.ConnectOrdered(from, to, -1)
+// Will panic if it finds an error.
+func (b *Builder) Connect(from, to string) {
+	b.ConnectOrdered(from, to, -1)
 }
 
 // Adds a one way channel between two processors by name.
@@ -89,18 +99,19 @@ func (b *Builder) Connect(from, to string) error {
 // of inputs.
 // Use this method when the processors has multiple inputs that
 // are not interchangeable. Otherwise, use Connect() instead.
-func (b *Builder) ConnectOrdered(from, to string, idx int) error {
+// Will panic if it finds an error.
+func (b *Builder) ConnectOrdered(from, to string, idx int) {
 
 	var ok bool
 
 	_, ok = b.nodes[from]
 	if !ok {
-		return fmt.Errorf("there is no processor named %s", from)
+		panic(fmt.Errorf("there is no processor named [%s]", from))
 	}
 
 	_, ok = b.nodes[to]
 	if !ok {
-		return fmt.Errorf("there is no processor named %s", to)
+		panic(fmt.Errorf("there is no processor named [%s]", to))
 	}
 
 	edge := g.Edge{T: b.nodes[from].n, H: b.nodes[to].n}
@@ -109,10 +120,9 @@ func (b *Builder) ConnectOrdered(from, to string, idx int) error {
 	k := fmt.Sprintf("%s-%s", edge.Tail(), edge.Head())
 	if idx >= 0 {
 		imap[k] = idx
-		return nil
+		return
 	}
 	imap[k] = len(imap) // auto-increment.
-	return nil
 }
 
 func (b *Builder) Run() {
@@ -147,13 +157,13 @@ func (b *Builder) Run() {
 		in, out := NewIO()
 		for _, ch := range node.toChans {
 			if ch == nil {
-				fmt.Errorf("found a nil input channel in node %s - check the node connections", node.name)
+				fmt.Errorf("found a nil input channel in node [%s] - check the node connections", node.name)
 			}
 			in.Add(ch)
 		}
 		for _, ch := range node.fromChans {
 			if ch == nil {
-				fmt.Errorf("found a nil output channel in node %s - this should not happen, report teh bug", node.name)
+				fmt.Errorf("found a nil output channel in node [%s] - this should not happen, report teh bug", node.name)
 			}
 			out.Add(ch)
 		}

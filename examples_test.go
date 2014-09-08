@@ -14,40 +14,37 @@ func ExampleBuilder() {
 	r1 := strings.NewReader(input)
 	r2 := strings.NewReader(input)
 
+	// Create an app first. Give it a name and a default buffer size for the channels.
 	app := NewApp("Example Builder", 10)
 
-	// Get the processsors.
-	p1 := Reader(r1, NewReader(4))
-	p2 := Reader(r2, NewReader(4))
-	p3 := AddScaled(4, 1.5)
-
-	// Use builder to greate the application graph.
+	// Use builder to create the application graph.
 	b := app.NewBuilder()
 
-	// The nodes.
-	b.Add("reader 1", p1)
-	b.Add("reader 2", p2)
-	b.Add("combo", p3)
-	// The end nodes are special, don't have a processor.
-	// We use them to get the output channels.
-	b.AddEndNode("end")
+	// App graph nodes with unique names.
+	b.Add("reader 1", Reader(r1, NewReader(4)))
+	b.Add("reader 2", Reader(r2, NewReader(4)))
+	b.Add("combo", AddScaled(4, 1.5))
 
-	// The connections.
+	// If you need an output channel from a node, use Tap().
+	// Behind the scenes will create a channel connected to
+	// a dummy end node with no processor.
+	b.Tap("combo")
+
+	// The connections. (App graph edges.)
 	// ConnectOrdered() is only necessary when a processor
 	// has multiple inputs that are not interchangeable.
 	// AddScaled() has multiple inputs that are interchangeable.
 	// We could have used Connect() instead of ConnectOrdered().
-	// (Ommiting error checking for clarity.)
+	// Will panic if there is a typo in a node name.
 	b.ConnectOrdered("reader 1", "combo", 1)
 	b.ConnectOrdered("reader 2", "combo", 0)
-	b.Connect("combo", "end")
 
 	// Run the app.
 	b.Run()
 
 	// Get the output channel.
 	// Must be done after the app started.
-	ch, _ := b.EndNodeChan("end")
+	ch := b.TapChan("combo")
 	v := <-ch
 	fmt.Printf("in     = [%s]\n", input)
 	fmt.Println("out[0] =", v)

@@ -40,6 +40,7 @@ func main() {
 		dsp.SpectralEnergy(logFFTSize),
 		dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients),
 		dsp.Log(),
+		dsp.DCT(filterbankSize, cepstrumSize),
 		dsp.WriteValues(os.Stdout, print),
 	)
 

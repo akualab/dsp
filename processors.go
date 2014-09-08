@@ -152,6 +152,30 @@ func Sum() Processor {
 	})
 }
 
+/*
+MaxNorm returns a norm value as follows:
+
+  define: y[n] = norm[n-1] * alpha where alpha < 1
+  define: norm(v) as sqrt(v . v) where "." is the dot product.
+
+  max[n] = max(y[n], norm(x[n])
+*/
+func MaxNorm(alpha float64) Processor {
+
+	return ProcFunc(func(in In, out Out) error {
+
+		norm := 0.0
+		for v := range in.From[0] {
+
+			y := norm * alpha
+			norm = math.Sqrt(floats.Dot(v, v))
+			max := math.Max(y, norm)
+			SendValue(Value{max}, out)
+		}
+		return nil
+	})
+}
+
 // Discrete Cosine Transform
 func DCT(inSize, outSize int) Processor {
 
@@ -163,7 +187,7 @@ func DCT(inSize, outSize int) Processor {
 			if inSize != size {
 				return fmt.Errorf("mismatch in size [%d] and input frame size [%d]", inSize, size)
 			}
-			v := make(Value, size, size)
+			v := make(Value, outSize, outSize)
 
 			for i := 1; i <= outSize; i++ {
 				for j := 0; j < inSize; j++ {
@@ -181,7 +205,7 @@ Compute moving average for the last M samples.
 
   for i >= M:
                   i
-  AVH=G[i] = 1/M * sum X[j]
+  AVG=G[i] = 1/M * sum X[j]
                  j=i-M
 
   for 0 < i < M
