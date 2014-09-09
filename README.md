@@ -1,6 +1,6 @@
 # DSP [![wercker status](https://app.wercker.com/status/e895805f384a01f891cce8797ef95804/s/master "wercker status")](https://app.wercker.com/project/bykey/e895805f384a01f891cce8797ef95804)[![GoDoc](https://godoc.org/github.com/akualab/dsp?status.png)](http://godoc.org/github.com/akualab/dsp)
 
-Package DSP provides processors that can be chained together to build digital signal processing systems in the Go language.
+Package DSP provides processors that can be chained together to build digital signal processing systems written in the Go language.
 
 
 ## Contributing
