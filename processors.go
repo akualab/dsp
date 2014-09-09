@@ -14,7 +14,7 @@ import (
 
 // Adds frames from all inputs and scales the added values.
 // Blocks until all input frames are available.
-// Will panic if all input frames do not have the same size.
+// Will panic if input frames sizes don't match.
 func AddScaled(size int, alpha float64) Processor {
 	return ProcFunc(func(in In, out Out) error {
 
@@ -29,6 +29,31 @@ func AddScaled(size int, alpha float64) Processor {
 				floats.Add(v, w)
 			}
 			floats.Scale(alpha, v)
+			SendValue(v, out)
+		}
+	DONE:
+		return nil
+	})
+}
+
+// Subtracts input[1] from input[0].
+// Blocks until all input frames are available.
+// Will panic if input frames sizes don't match.
+func Sub() Processor {
+	return ProcFunc(func(in In, out Out) error {
+
+		if len(in.From) != 2 {
+			return fmt.Errorf("proc has %d inputs, expected 2", len(in.From))
+		}
+		for {
+			a, aok := <-in.From[0]
+			b, bok := <-in.From[1]
+			if !aok || !bok {
+				goto DONE
+			}
+			v := make(Value, len(a), len(a))
+			copy(v, a)
+			floats.Sub(v, b)
 			SendValue(v, out)
 		}
 	DONE:
@@ -255,4 +280,57 @@ func movingSum(p int, buf []Value, sum, data Value) Value {
 	}
 	floats.Add(sum, data)
 	return sum.Copy()
+}
+
+/*
+Computes a weighted difference between samples as follows:
+
+             delta-1
+    diff[i] = sum c_j * { x[i+j+1] - x[i-j-1] }
+              j=0
+
+   delta-1
+    sum {c_j} = 1.0
+    j=0
+
+Note that this operation in non-causal and will result in a delay
+of delta samples.
+
+Param "size" must match the size of the input vectors.
+Param "coeff" is the slice of coefficients.
+*/
+func Diff(size int, coeff []float64) Processor {
+
+	delta := len(coeff)
+	bufSize := 2*delta + 1
+	return ProcFunc(func(in In, out Out) error {
+		buf := make([]Value, bufSize, bufSize)
+		// Fill with zero values.
+		for j := range buf {
+			buf[j] = make(Value, size, size)
+		}
+		i := 0
+
+		for input := range in.From[0] {
+			if len(input) != size {
+				return fmt.Errorf("input vector size %d does not match size %d", input, size)
+			}
+			// Store the input vector in the buffer.
+			// Should be safe to strore a reference if we follow
+			// the convention to treat input vectors as read only.
+			buf[i%bufSize] = input
+			v := make(Value, size, size)
+			for j := 0; j < delta; j++ {
+				minus := Modulo(i-j-1, bufSize)
+				plus := Modulo(i+j+1, bufSize)
+				floats.AddScaled(v, -coeff[j], buf[minus])
+				floats.AddScaled(v, coeff[j], buf[plus])
+				// fmt.Printf("i:%4d, j:%d, in:%3.f, buf[%d]:%.f, buf[%d]:%.f, v:%3.f, coeff:%.f\n", i, j, input[0], plus, buf[plus][0], minus, buf[minus][0], v[0], coeff[j])
+			}
+			SendValue(v, out)
+			i++
+			//			i = i % bufSize
+		}
+		return nil
+	})
 }

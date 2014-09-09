@@ -52,7 +52,8 @@ func main() {
 	b.Tap("cepstrum")
 	b.Add("writer", dsp.WriteValues(os.Stdout, print))
 	b.Add("mean cepstrum", dsp.MovingAverage(cepstrumSize, cepMeanWin, nil))
-	b.Tap("mean cepstrum")
+	b.Add("zero mean cepstrum", dsp.Sub())
+	b.Tap("zero mean cepstrum")
 
 	b.Connect("waveform", "windowed")
 	b.Connect("windowed", "spectrum")
@@ -61,6 +62,10 @@ func main() {
 	b.Connect("log filterbank", "cepstrum")
 	b.Connect("cepstrum", "writer")
 	b.Connect("cepstrum", "mean cepstrum")
+
+	// Subtract approx. cepstrum mean from cepstrum.
+	b.ConnectOrdered("cepstrum", "zero mean cepstrum", 0)
+	b.ConnectOrdered("mean cepstrum", "zero mean cepstrum", 1)
 
 	b.Add("cepstral energy", dsp.Sum())
 	b.Tap("cepstral energy")
@@ -75,7 +80,7 @@ func main() {
 	// Get the output channels.
 	// Must be done after calling Run()
 	cepChan := b.TapChan("cepstrum")
-	meanCepChan := b.TapChan("mean cepstrum")
+	zmCepChan := b.TapChan("zero mean cepstrum")
 	cepEgyChan := b.TapChan("cepstral energy")
 	maxCepEgyChan := b.TapChan("max cepstral energy")
 
@@ -87,7 +92,7 @@ func main() {
 	i := 0
 	for v := range cepChan {
 		log.Printf("%5d: %v", i, v)
-		vv := <-meanCepChan
+		vv := <-zmCepChan
 		log.Printf("%5d: %v", i, vv)
 		w := <-cepEgyChan
 		log.Printf("%5d: %v", i, w)

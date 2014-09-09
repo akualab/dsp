@@ -206,3 +206,14 @@ func DFTEnergy(dft []float64) []float64 {
 	}
 	return energy
 }
+
+// Returns modulo of two numbers.
+//  6 % 5 = 1
+// -3 % 5 = 2
+func Modulo(a, b int) int {
+	ret := a % b
+	if ret < 0 {
+		ret += b
+	}
+	return ret
+}

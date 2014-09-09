@@ -139,3 +139,35 @@ func TestMovingAverage(t *testing.T) {
 		CompareFloats(t, v, actual[0], "mismatched values", 0.01)
 	}
 }
+
+func TestDiff(t *testing.T) {
+
+	const input = "1 1 7 6 5 2 2 3 4 5 -1"
+
+	// expected output for winSize=4
+	expected := []float64{0, 0, -1, 0, -6, 1, 1, 3, 0, -1, -1}
+
+	r := strings.NewReader(input)
+
+	app := NewApp("Test Diff", 10)
+
+	out := app.Run(
+		Reader(r, NewReader(1)),
+		Diff(1, []float64{0, 1}),
+		WriteValues(os.Stdout, testing.Verbose()),
+	)
+
+	//	for v := range out {
+	//		fmt.Printf("%v\n", v)
+	//	}
+
+	for _, v := range expected {
+		actual := <-out
+		CompareFloats(t, v, actual[0], "mismatched values", 0.01)
+	}
+
+	if app.Error() != nil {
+		t.Fatalf("error: %s", app.Error())
+	}
+
+}
