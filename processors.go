@@ -305,7 +305,7 @@ func Diff(size int, coeff []float64) Processor {
 	bufSize := 2*delta + 1
 	return ProcFunc(func(in In, out Out) error {
 		buf := make([]Value, bufSize, bufSize)
-		// Fill with zero values.
+		// Init circular buffer with zero values.
 		for j := range buf {
 			buf[j] = make(Value, size, size)
 		}
@@ -318,7 +318,7 @@ func Diff(size int, coeff []float64) Processor {
 			// Store the input vector in the buffer.
 			// Should be safe to strore a reference if we follow
 			// the convention to treat input vectors as read only.
-			buf[i%bufSize] = input
+			buf[i] = input
 			v := make(Value, size, size)
 			for j := 0; j < delta; j++ {
 				minus := Modulo(i-j-1, bufSize)
@@ -329,7 +329,7 @@ func Diff(size int, coeff []float64) Processor {
 			}
 			SendValue(v, out)
 			i++
-			//			i = i % bufSize
+			i = i % bufSize
 		}
 		return nil
 	})

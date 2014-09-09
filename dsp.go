@@ -65,7 +65,9 @@ A pipeline can easily be converted into a single composite processor:
 
 A more realistic application will have processors with multiple
 inputs and multiple outputs. The Builder functions provide a set of
-tools to create the application graph. See the examples.
+tools to create the application graph.
+
+For a comrehensive example see examples/speech2/main.go.
 
 Convention: Input values should be treated as read-only because
 they may be shared with other processors.
