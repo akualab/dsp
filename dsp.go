@@ -76,7 +76,9 @@ To quickly create a copy, do newValue = inputValue.Copy().
 CREDITS:
 
 I adapted the design from https://github.com/ghemawat/stream by Sanjay Ghemawat.
-Package stream is designed to process streams of text by chaining filters.
+Package stream is designed to process streams of text by chaining filters. Package stream
+was itself adapted from Gustavo Niemeyer's "pipe" https://gopkg.in/pipe.v2 . These are two
+interesting designs for piping data throuch channels. Check them out.
 
 CONTACT:
 
