@@ -12,7 +12,7 @@ import (
 	"github.com/gonum/floats"
 )
 
-// Adds frames from all inputs and scales the added values.
+// AddScaled adds frames from all inputs and scales the added values.
 // Blocks until all input frames are available.
 // Will panic if input frames sizes don't match.
 func AddScaled(size int, alpha float64) Processor {
@@ -36,7 +36,7 @@ func AddScaled(size int, alpha float64) Processor {
 	})
 }
 
-// Subtracts input[1] from input[0].
+// Sub subtracts input[1] from input[0].
 // Blocks until all input frames are available.
 // Will panic if input frames sizes don't match.
 func Sub() Processor {
@@ -61,8 +61,8 @@ func Sub() Processor {
 	})
 }
 
-// Stack multiple input frames into a single frame. Size of output frame is sum of input frame sizes.
-// Blocks until all input frames are available.
+// Join stacks multiple input vectors into a single vector. Output vector size equals sum of input vector sizes.
+// Blocks until all input vectors are available.
 func Join() Processor {
 	return ProcFunc(func(in In, out Out) error {
 
@@ -83,10 +83,10 @@ func Join() Processor {
 	})
 }
 
-// Computes the real FFT energy of the input frame.
+// SpectralEnergy computes the real FFT energy of the input frame.
 // See dsp.RealFT and dsp.DFTEnergy for details.
-// output frame size will be 2^logSize
-// the real fft size computed is 2 * frame_size
+// The size of the output vector is 2^logSize.
+// The real fft size computed is 2 * frame_size.
 func SpectralEnergy(logSize uint) Processor {
 	fs := 1 << logSize // output frame size
 	dftSize := 2 * fs
@@ -99,13 +99,14 @@ func SpectralEnergy(logSize uint) Processor {
 			egy := DFTEnergy(dft)
 			SendValue(egy, out)
 		}
-
 		return nil
 	})
 }
 
 var (
-	MelFilterbankIndices      = []int{10, 11, 14, 17, 20, 23, 27, 30, 33, 36, 40, 45, 50, 56, 62, 69, 76, 84}
+	// MelFilterbankIndices are the indices of the filters in the filterbank.
+	MelFilterbankIndices = []int{10, 11, 14, 17, 20, 23, 27, 30, 33, 36, 40, 45, 50, 56, 62, 69, 76, 84}
+	// MelFilterbankCoefficients is a hardcoded filterbank for the speech example.
 	MelFilterbankCoefficients = [][]float64{
 		[]float64{1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
 		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
@@ -128,10 +129,9 @@ var (
 	}
 )
 
-// Computes filterbank energies using the provided indices and coefficients.
+// Filterbank computes filterbank energies using the provided indices and coefficients.
 func Filterbank(indices []int, coeff [][]float64) Processor {
 	nf := len(indices) // num filterbanks
-
 	return ProcFunc(func(in In, out Out) error {
 
 		for input := range in.From[0] {
@@ -147,7 +147,7 @@ func Filterbank(indices []int, coeff [][]float64) Processor {
 	})
 }
 
-// Natual logarithm processor.
+// Log returns the natural logarithm of the input.
 func Log() Processor {
 
 	return ProcFunc(func(in In, out Out) error {
@@ -201,7 +201,7 @@ func MaxNorm(alpha float64) Processor {
 	})
 }
 
-// Discrete Cosine Transform
+// DCT returns the Discrete Cosine Transform of the input vector.
 func DCT(inSize, outSize int) Processor {
 
 	dct := GenerateDCT(outSize+1, inSize)
@@ -226,7 +226,7 @@ func DCT(inSize, outSize int) Processor {
 }
 
 /*
-Compute moving average for the last M samples.
+MovingAverage computes the average for the last M samples.
 
   for i >= M:
                   i
@@ -241,7 +241,7 @@ Compute moving average for the last M samples.
   Where AVG is the output vector and X is the input vector.
 
 Will panic if output size is different from input size.
-If param avg in not nil, it will be used as the intial avg
+If param avg in not nil, it will be used as the initial avg
 for i < M.
 */
 func MovingAverage(outSize, winSize int, avg Value) Processor {
@@ -283,7 +283,7 @@ func movingSum(p int, buf []Value, sum, data Value) Value {
 }
 
 /*
-Computes a weighted difference between samples as follows:
+Diff computes a weighted difference between samples as follows:
 
              delta-1
     diff[i] = sum c_j * { x[i+j+1] - x[i-j-1] }
@@ -316,7 +316,7 @@ func Diff(size int, coeff []float64) Processor {
 				return fmt.Errorf("input vector size %d does not match size %d", input, size)
 			}
 			// Store the input vector in the buffer.
-			// Should be safe to strore a reference if we follow
+			// Should be safe to store a reference if we follow
 			// the convention to treat input vectors as read only.
 			buf[i] = input
 			v := make(Value, size, size)

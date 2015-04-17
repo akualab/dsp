@@ -15,7 +15,7 @@ import (
 
 const tapSuffix = " tap"
 
-// Helper to build complex application graphs.
+// Builder is a helper to build complex application graphs.
 type Builder struct {
 	App      *App
 	g        *g.DirectedGraph
@@ -32,6 +32,7 @@ type node struct {
 	inputIdx  map[string]int // edge to input index
 }
 
+// NewBuilder returns a new builder.
 func (app *App) NewBuilder() *Builder {
 
 	b := &Builder{
@@ -44,7 +45,7 @@ func (app *App) NewBuilder() *Builder {
 	return b
 }
 
-// Adds a processor with a name.
+// Add adds a processor with a name.
 func (b *Builder) Add(name string, p Processor) string {
 	n := b.g.NewNode()
 	b.nodes[name] = &node{
@@ -59,7 +60,7 @@ func (b *Builder) Add(name string, p Processor) string {
 	return name
 }
 
-// Adds an output node with no processor.
+// Tap adds an output node with no processor.
 // An output channel will be available from node "name".
 func (b *Builder) Tap(name string) {
 	tapNodeName := fmt.Sprintf("%s%s", name, tapSuffix)
@@ -67,7 +68,7 @@ func (b *Builder) Tap(name string) {
 	b.Connect(name, tapNodeName)
 }
 
-// Returns output channel from node.
+// TapChan returns output channel from node.
 func (b *Builder) TapChan(name string) chan Value {
 
 	tapNodeName := fmt.Sprintf("%s%s", name, tapSuffix)
@@ -76,24 +77,22 @@ func (b *Builder) TapChan(name string) chan Value {
 	if !ok {
 		panic(fmt.Errorf("there is no end node conected from %s - use Tap(\"%s\") to create an end node", name, name))
 	}
-
 	if b.nodes[tapNodeName].proc != nil {
 		panic(fmt.Errorf("end node [%s] has a non-nil processor, this should not happen, report bug.", tapNodeName))
 	}
-
 	if len(b.nodes[tapNodeName].toChans) == 0 {
 		panic(fmt.Errorf("end node [%s] has no output channel, this should not happen, report bug", tapNodeName))
 	}
 	return b.nodes[tapNodeName].toChans[0]
 }
 
-// Adds a one way channel between two processors by name.
+// Connect adds a one way channel between two processors by name.
 // Will panic if it finds an error.
 func (b *Builder) Connect(from, to string) {
 	b.ConnectOrdered(from, to, -1)
 }
 
-// Adds a one way channel between two processors by name.
+// ConnectOrdered adds a one way channel between two processors by name.
 // The input of the receiver node is specified with an index.
 // The index must be in the range {0...N-1} where N is the number
 // of inputs.
@@ -103,17 +102,14 @@ func (b *Builder) Connect(from, to string) {
 func (b *Builder) ConnectOrdered(from, to string, idx int) {
 
 	var ok bool
-
 	_, ok = b.nodes[from]
 	if !ok {
 		panic(fmt.Errorf("there is no processor named [%s]", from))
 	}
-
 	_, ok = b.nodes[to]
 	if !ok {
 		panic(fmt.Errorf("there is no processor named [%s]", to))
 	}
-
 	edge := g.Edge{T: b.nodes[from].n, H: b.nodes[to].n}
 	b.g.AddDirectedEdge(edge, 1.0)
 	imap := b.nodes[to].inputIdx
@@ -125,6 +121,8 @@ func (b *Builder) ConnectOrdered(from, to string, idx int) {
 	imap[k] = len(imap) // auto-increment.
 }
 
+// Run creates channels according to the graph specification and
+// activates the processors.
 func (b *Builder) Run() {
 
 	// Create one channel per edge.
