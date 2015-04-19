@@ -11,12 +11,17 @@ import (
 )
 
 const (
+	// Rectangular window.
 	Rectangular = iota
+	// Hanning window.
 	Hanning
+	// Hamming window.
 	Hamming
+	// Blackman window.
 	Blackman
 )
 
+// WindowProc is a window processor.
 type WindowProc struct {
 	WinSize    int
 	WindowType int
@@ -24,7 +29,7 @@ type WindowProc struct {
 	err        error
 }
 
-// Returns a Windowing processor with a rectangular shape.
+// Window returns a window processor with a rectangular shape.
 func Window(winSize int) *WindowProc {
 	return &WindowProc{
 		WinSize:    winSize,
@@ -32,6 +37,7 @@ func Window(winSize int) *WindowProc {
 	}
 }
 
+// Use sets the window type.
 func (win *WindowProc) Use(windowType int) *WindowProc {
 
 	win.WindowType = windowType
@@ -51,14 +57,12 @@ func (win *WindowProc) Use(windowType int) *WindowProc {
 	return win
 }
 
-// Implements the dsp.Processor interface.
-func (win *WindowProc) RunProc(in In, out Out) error {
-
+// RunProc implements the dsp.Processor interface.
+func (win *WindowProc) RunProc(in []FromChan, out []ToChan) error {
 	if win.err != nil {
 		return win.err
 	}
-
-	for in := range in.From[0] {
+	for in := range in[0] {
 
 		inSize := len(in)
 		if win.WinSize > inSize {
@@ -73,13 +77,12 @@ func (win *WindowProc) RunProc(in In, out Out) error {
 				v[i] = in[i] * win.data[i]
 			}
 		}
-		//arg.Out <- v
 		SendValue(v, out)
 	}
 	return nil
 }
 
-// Returns a Hanning window.
+// HanningWindow returns a Hanning window.
 // w(t) = 0.5  – 0.5 * cos(2 pi t / T)
 func HanningWindow(n int) []float64 {
 	data := make([]float64, n, n)
@@ -89,7 +92,7 @@ func HanningWindow(n int) []float64 {
 	return data
 }
 
-// Returns a Hamming window.
+// HammingWindow returns a Hanning window.
 // w(t) = 0.54  – 0.46 * cos(2 pi t / T)
 func HammingWindow(n int) []float64 {
 	data := make([]float64, n, n)
@@ -99,7 +102,7 @@ func HammingWindow(n int) []float64 {
 	return data
 }
 
-// Returns a Blackman window.
+// BlackmanWindow returns a Blackman window.
 // w(t) = 0.42  – 0.5 * cos(2pt/T) + 0.08 * cos(4pt/T)
 func BlackmanWindow(n int) []float64 {
 	data := make([]float64, n, n)

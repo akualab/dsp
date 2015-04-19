@@ -32,9 +32,9 @@ const (
 // can be used like the "tee" command, which can often be useful
 // for debugging.
 func WriteValues(writer io.Writer, on bool) Processor {
-	return ProcFunc(func(in In, out Out) error {
+	return ProcFunc(func(in []FromChan, out []ToChan) error {
 		b := bufio.NewWriter(writer)
-		for v := range in.From[0] {
+		for v := range in[0] {
 			if on {
 				s := fmt.Sprintf("%v\n", v)
 				if _, err := b.Write([]byte(s)); err != nil {
@@ -73,7 +73,7 @@ func NewReader(frameSize int) *ReaderConfig {
 
 // Processor to read values from an io.Reader interface.
 func Reader(reader io.Reader, config *ReaderConfig) Processor {
-	return ProcFunc(func(in In, out Out) error {
+	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
 		var splitFunc bufio.SplitFunc
 		if config.StepSize > config.FrameSize {

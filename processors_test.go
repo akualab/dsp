@@ -29,11 +29,11 @@ func TestAddScaled(t *testing.T) {
 	w3 := app.Wire()
 	w4 := app.Wire()
 
-	out1 := Out{To: []ToChan{w1}}
-	app.Connect(p1, In{}, out1)
+	out1 := []ToChan{w1}
+	app.Connect(p1, []FromChan{}, out1)
 
-	out2 := Out{To: []ToChan{w2}}
-	app.Connect(p2, In{}, out2)
+	out2 := []ToChan{w2}
+	app.Connect(p2, []FromChan{}, out2)
 
 	//	Connect two inputs and one output.
 	app.ConnectOne(p3, w3, w1, w2)
@@ -75,10 +75,10 @@ func TestJoin(t *testing.T) {
 	w3 := app.Wire()
 	w4 := app.Wire()
 
-	out1 := Out{To: []ToChan{w1}}
-	app.Connect(p1, In{}, out1)
-	out2 := Out{To: []ToChan{w2}}
-	app.Connect(p2, In{}, out2)
+	out1 := []ToChan{w1}
+	app.Connect(p1, []FromChan{}, out1)
+	out2 := []ToChan{w2}
+	app.Connect(p2, []FromChan{}, out2)
 	app.ConnectOne(p3, w3, w1, w2)
 	app.ConnectOne(p4, w4, w3)
 
@@ -150,10 +150,9 @@ func TestDiff(t *testing.T) {
 	r := strings.NewReader(input)
 
 	app := NewApp("Test Diff", 10)
-
 	out := app.Run(
 		Reader(r, NewReader(1)),
-		Diff(1, []float64{0, 1}),
+		NewDiffProc(1, []float64{0, 1}),
 		WriteValues(os.Stdout, testing.Verbose()),
 	)
 

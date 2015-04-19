@@ -82,14 +82,14 @@ func main() {
 	b.ConnectOrdered("max cepstral energy", "normalized cepstral energy", 1)
 
 	// Delta cepstrum features.
-	b.Add("delta cepstrum", dsp.Diff(cepstrumSize, deltaCoeff))
-	b.Add("delta delta cepstrum", dsp.Diff(cepstrumSize, deltaCoeff))
+	b.Add("delta cepstrum", dsp.NewDiffProc(cepstrumSize, deltaCoeff))
+	b.Add("delta delta cepstrum", dsp.NewDiffProc(cepstrumSize, deltaCoeff))
 	b.Connect("zero mean cepstrum", "delta cepstrum")
 	b.Connect("delta cepstrum", "delta delta cepstrum")
 
 	// Delta energy features.
-	b.Add("delta energy", dsp.Diff(1, deltaCoeff))
-	b.Add("delta delta energy", dsp.Diff(1, deltaCoeff))
+	b.Add("delta energy", dsp.NewDiffProc(1, deltaCoeff))
+	b.Add("delta delta energy", dsp.NewDiffProc(1, deltaCoeff))
 	b.Connect("normalized cepstral energy", "delta energy")
 	b.Connect("delta energy", "delta delta energy")
 

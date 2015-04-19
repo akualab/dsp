@@ -152,18 +152,18 @@ func (b *Builder) Run() {
 	// For each node, launch the processor.
 	for _, nn := range b.g.NodeList() {
 		node := b.nodeByID[nn]
-		in, out := NewIO()
+		in, out := []FromChan{}, []ToChan{}
 		for _, ch := range node.toChans {
 			if ch == nil {
 				fmt.Errorf("found a nil input channel in node [%s] - check the node connections", node.name)
 			}
-			in.Add(ch)
+			in = append(in, ch)
 		}
 		for _, ch := range node.fromChans {
 			if ch == nil {
 				fmt.Errorf("found a nil output channel in node [%s] - this should not happen, report teh bug", node.name)
 			}
-			out.Add(ch)
+			out = append(out, ch)
 		}
 		log.Printf("preparing to launch node [%s], in: %d, out: %d",
 			node.name,
