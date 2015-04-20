@@ -30,6 +30,7 @@ type Waveform struct {
 
 	frameSize int
 	stepSize  int
+	idx       int
 }
 
 // New returns a waveform object.
@@ -123,4 +124,22 @@ func (w *Waveform) Frame(idx int) (dsp.Value, error) {
 		return nil, ErrOutOfBounds
 	}
 	return dsp.Value(w.Samples[start:end]), nil
+}
+
+// Reset implements the dsp.Resetter interface.
+// Sets frame index back to zero.
+func (w *Waveform) Reset() {
+	w.idx = 0
+}
+
+// NextFrame returns the next frame of samples sequentially.
+// Returns error value Done when no additional frames are available.
+// See also Frame().
+func (w *Waveform) NextFrame(idx int) (dsp.Value, error) {
+	frame, e := w.Frame(w.idx)
+	if e == Done {
+		return nil, Done
+	}
+	w.idx++
+	return frame, e
 }

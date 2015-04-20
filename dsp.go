@@ -30,9 +30,9 @@ type Processor interface {
 	RunProc(in []FromChan, out []ToChan) error
 }
 
-// The Reseter interface must be implemented by processors that have state that must
+// The Resetter interface must be implemented by processors that have state that must
 // be reset before processing a new stream.
-type Reseter interface {
+type Resetter interface {
 	Reset()
 }
 
