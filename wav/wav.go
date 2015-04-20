@@ -16,6 +16,9 @@ import (
 // Done is returned as the error value when there are no more waveforms available in the stream.
 var Done = errors.New("no more json objects")
 
+// ErrOutOfBounds is returned when the frame index is out of bounds.
+var ErrOutOfBounds = errors.New("frame index out of bounds")
+
 // A Waveform format for reading json files.
 type Waveform struct {
 	// ID is a waveform identifier.
@@ -62,6 +65,7 @@ type Iter struct {
 
 // NewIterator creates an iterator to access all waveforms in path.
 // To specify path see ju.JSONStreamer.
+// It is the caller's responsibility to call Close to release the underlying readers.
 func NewIterator(path string, fs float64, frameSize, stepSize int) (Iter, error) {
 	js, err := ju.NewJSONStreamer(path)
 	if err != nil {
@@ -105,18 +109,18 @@ func (w *Waveform) NumFrames() int {
 	return len(w.Samples) / w.stepSize
 }
 
-// Frame returns a frame of samples for the given index.
-// The caller should not modify the slice in-place.
-func (w *Waveform) Frame(idx int) dsp.Value {
+// Frame returns a frame of samples for the given index. NOTE: the slice may be shared with
+// other processors or may be cached. For these reason, the caller should not modify the slice in-place.
+func (w *Waveform) Frame(idx int) (dsp.Value, error) {
 
 	n := len(w.Samples)
 	start := idx * w.stepSize
 	end := start + w.frameSize
 	if start < 0 || start >= n {
-		panic(fmt.Errorf("waveform frame index [%d] out of range, wav length is %d", idx, n))
+		return nil, ErrOutOfBounds
 	}
 	if end < 1 || end >= n {
-		panic(fmt.Errorf("waveform frame index [%d] out of range, wav length is %d", idx, n))
+		return nil, ErrOutOfBounds
 	}
-	return dsp.Value(w.Samples[start:end])
+	return dsp.Value(w.Samples[start:end]), nil
 }
