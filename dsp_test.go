@@ -8,14 +8,50 @@ package dsp
 import (
 	"os"
 	"testing"
+	"time"
 )
+
+func TestValueOK(t *testing.T) {
+
+	value := Value{1, 2, 3}
+	in := make(chan Value)
+	flag := 0
+	go func() {
+		for {
+			select {
+			case v, ok := <-in:
+				if ok {
+					t.Log(v)
+					flag = 1
+				} else {
+					t.Log("closed")
+					flag = 2
+					in = nil
+					return
+				}
+			}
+		}
+	}()
+
+	t.Log(flag)
+	in <- value
+	t.Log(flag)
+	close(in)
+	for {
+		time.Sleep(1)
+		if in == nil {
+			break
+		}
+	}
+	t.Log(flag)
+
+}
 
 func TestBasic(t *testing.T) {
 
 	app := NewApp("Test", 1000)
 
 	p1 := Source(4, 10).Use(NewNormal(88, 10, 2))
-
 	w1 := app.Wire()
 	app.ConnectOne(p1, w1)
 
@@ -23,9 +59,9 @@ func TestBasic(t *testing.T) {
 	w2 := app.Wire()
 	app.ConnectOne(p2, w2, w1)
 
-	for v := range w2 {
-		_ = v
-	}
+	v := <-w2
+	t.Log(v)
+	app.Close()
 
 	if app.Error() != nil {
 		t.Fatalf("error: %s", app.Error())
@@ -104,6 +140,7 @@ func TestChain(t *testing.T) {
 	expected = hamming[57]
 	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
 
+	app.Close()
 }
 
 func TestTwoWindows(t *testing.T) {

@@ -44,6 +44,7 @@ func main() {
 
 	// Use builder to create the application graph.
 	b := app.NewBuilder()
+	fmt.Println(b)
 
 	// Turns off writer output.
 	print := false
@@ -114,6 +115,7 @@ func main() {
 	i := 0
 	for v := range combChan {
 		fmt.Printf("f=%5d, len=%d, v=%v\n", i, len(v), vecSprint(v))
+		fmt.Println(b)
 		i++
 	}
 

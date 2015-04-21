@@ -14,7 +14,7 @@ import (
 
 // AddScaled adds frames from all inputs and scales the added values.
 // Blocks until all input frames are available.
-// Will panic if input frames sizes don't match.
+// Will panic if input frame sizes don't match.
 func AddScaled(size int, alpha float64) Processor {
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
@@ -22,23 +22,22 @@ func AddScaled(size int, alpha float64) Processor {
 		for {
 			v := make(Value, size, size)
 			for i := 0; i < numInputs; i++ {
-				w, ok := <-in[i]
+
+				w, ok := ValueOK(in[i])
 				if !ok {
-					goto DONE
+					return nil
 				}
 				floats.Add(v, w)
 			}
 			floats.Scale(alpha, v)
 			SendValue(v, out)
 		}
-	DONE:
-		return nil
 	})
 }
 
 // Sub subtracts input[1] from input[0].
 // Blocks until all input frames are available.
-// Will panic if input frames sizes don't match.
+// Will panic if input frame sizes don't match.
 func Sub() Processor {
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
@@ -46,18 +45,19 @@ func Sub() Processor {
 			return fmt.Errorf("proc has %d inputs, expected 2", len(in))
 		}
 		for {
-			a, aok := <-in[0]
-			b, bok := <-in[1]
-			if !aok || !bok {
-				goto DONE
+			a, aok := ValueOK(in[0])
+			if !aok {
+				return nil
+			}
+			b, bok := ValueOK(in[1])
+			if !bok {
+				return nil
 			}
 			v := make(Value, len(a), len(a))
 			copy(v, a)
 			floats.Sub(v, b)
 			SendValue(v, out)
 		}
-	DONE:
-		return nil
 	})
 }
 
@@ -68,18 +68,16 @@ func Join() Processor {
 
 		numInputs := len(in)
 		for {
-			v := Value{} // reset the output frame.
+			v := Value{}
 			for i := 0; i < numInputs; i++ {
-				w, ok := <-in[i]
+				w, ok := ValueOK(in[i])
 				if !ok {
-					goto DONE
+					return nil
 				}
 				v = append(v, w...)
 			}
 			SendValue(v, out)
 		}
-	DONE:
-		return nil
 	})
 }
 
@@ -91,15 +89,17 @@ func SpectralEnergy(logSize uint) Processor {
 	fs := 1 << logSize // output frame size
 	dftSize := 2 * fs
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
-		for data := range in[0] {
+		for {
+			data, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 			dft := make(Value, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
 			copy(dft, data)                      // zero padded
 			RealFT(dft, dftSize, true)
 			egy := DFTEnergy(dft)
 			SendValue(egy, out)
 		}
-		return nil
 	})
 }
 
@@ -134,7 +134,11 @@ func Filterbank(indices []int, coeff [][]float64) Processor {
 	nf := len(indices) // num filterbanks
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
-		for input := range in[0] {
+		for {
+			input, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 			fb := make(Value, nf, nf)
 			for i := 0; i < nf; i++ {
 				for k := 0; k < len(coeff[i]); k++ {
@@ -143,7 +147,6 @@ func Filterbank(indices []int, coeff [][]float64) Processor {
 			}
 			SendValue(fb, out)
 		}
-		return nil
 	})
 }
 
@@ -152,7 +155,11 @@ func Log() Processor {
 
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
-		for data := range in[0] {
+		for {
+			data, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 			size := len(data)
 			v := make(Value, size, size)
 			for k, w := range data {
@@ -160,8 +167,6 @@ func Log() Processor {
 			}
 			SendValue(v, out)
 		}
-
-		return nil
 	})
 }
 
@@ -170,10 +175,13 @@ func Sum() Processor {
 
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
-		for data := range in[0] {
+		for {
+			data, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 			SendValue(Value{floats.Sum(data)}, out)
 		}
-		return nil
 	})
 }
 
@@ -190,14 +198,16 @@ func MaxNorm(alpha float64) Processor {
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
 
 		norm := 0.0
-		for v := range in[0] {
-
+		for {
+			v, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 			y := norm * alpha
 			norm = math.Sqrt(floats.Dot(v, v))
 			max := math.Max(y, norm)
 			SendValue(Value{max}, out)
 		}
-		return nil
 	})
 }
 
@@ -206,8 +216,12 @@ func DCT(inSize, outSize int) Processor {
 
 	dct := GenerateDCT(outSize+1, inSize)
 	return ProcFunc(func(in []FromChan, out []ToChan) error {
+		for {
+			input, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 
-		for input := range in[0] {
 			size := len(input)
 			if inSize != size {
 				return fmt.Errorf("mismatch in size [%d] and input frame size [%d]", inSize, size)
@@ -221,7 +235,6 @@ func DCT(inSize, outSize int) Processor {
 			}
 			SendValue(v, out)
 		}
-		return nil
 	})
 }
 
@@ -250,8 +263,12 @@ func MovingAverage(outSize, winSize int, avg Value) Processor {
 		sum := make(Value, outSize, outSize)
 		buf := make([]Value, winSize, winSize)
 		var i uint32
+		for {
+			input, ok := ValueOK(in[0])
+			if !ok {
+				return nil
+			}
 
-		for input := range in[0] {
 			v := movingSum(int(i%uint32(winSize)), buf, sum, input)
 			if i >= uint32(winSize) {
 				floats.Scale(1.0/float64(winSize), v)
@@ -263,7 +280,6 @@ func MovingAverage(outSize, winSize int, avg Value) Processor {
 			SendValue(v, out)
 			i++
 		}
-		return nil
 	})
 }
 
@@ -338,7 +354,12 @@ func (dp *DiffProc) Reset() {
 func (dp *DiffProc) RunProc(in []FromChan, out []ToChan) error {
 
 	i := 0
-	for input := range in[0] {
+	for {
+		input, ok := ValueOK(in[0])
+		if !ok {
+			return nil
+		}
+
 		if len(input) != dp.size {
 			return fmt.Errorf("input vector size %d does not match size %d", len(input), dp.size)
 		}
@@ -358,5 +379,4 @@ func (dp *DiffProc) RunProc(in []FromChan, out []ToChan) error {
 		i++
 		i = i % dp.bufSize
 	}
-	return nil
 }

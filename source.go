@@ -7,18 +7,18 @@ package dsp
 
 import "math/rand"
 
-// Number generators must implement this interface.
+// NumberReader - number generators must implement this interface.
 type NumberReader interface {
 	Next() float64
 }
 
-// A processor to generate data.
+// SourceProc is a processor that generates data.
 type SourceProc struct {
 	nr           NumberReader
 	length, size int
 }
 
-// Returns a data generator processor.
+// Source returns a data generator processor.
 // Uses a Random number generator with values between
 // 0 and 1 by default.
 func Source(size, length int) *SourceProc {
@@ -29,13 +29,13 @@ func Source(size, length int) *SourceProc {
 	}
 }
 
-// Set the desire type of data generator.
+// Use sets the desire type of data generator.
 func (s *SourceProc) Use(nr NumberReader) *SourceProc {
 	s.nr = nr
 	return s
 }
 
-// Implements the dsp.Processor interface.
+// RunProc implements the dsp.Processor interface.
 func (s *SourceProc) RunProc(in []FromChan, out []ToChan) error {
 	for i := 0; i < s.length; i++ {
 		v := make(Value, s.size, s.size)
@@ -47,12 +47,12 @@ func (s *SourceProc) RunProc(in []FromChan, out []ToChan) error {
 	return nil
 }
 
-// Returns pseudo-random numbers between 0 an 1
+// Random returns pseudo-random numbers between 0 an 1
 type Random struct {
 	r *rand.Rand
 }
 
-// Returns random generator.
+// NewRandom returns random generator.
 func NewRandom(seed int64) *Random {
 
 	return &Random{
@@ -60,17 +60,18 @@ func NewRandom(seed int64) *Random {
 	}
 }
 
+// Next float value.
 func (random *Random) Next() float64 {
 	return random.r.Float64()
 }
 
-// Returns random numbers generated with a Normal distribution.
+// Normal returns random numbers generated with a Normal distribution.
 type Normal struct {
 	r        *rand.Rand
 	mean, sd float64
 }
 
-// Returns a new Normal random generator.
+// NewNormal returns a new Normal random generator.
 func NewNormal(seed int64, mean, sd float64) *Normal {
 
 	return &Normal{
@@ -80,11 +81,12 @@ func NewNormal(seed int64, mean, sd float64) *Normal {
 	}
 }
 
+// Next float value.
 func (n *Normal) Next() float64 {
 	return n.r.NormFloat64()*n.sd + n.mean
 }
 
-// Returns a suare signal.
+// Square is a square signal.
 type Square struct {
 	// Num samples with high values.
 	HighDuration int
@@ -97,7 +99,7 @@ type Square struct {
 	state int
 }
 
-// Returns square generator.
+// NewSquare returns square generator.
 func NewSquare(high, low float64, highDur, lowDur int) *Square {
 
 	return &Square{
@@ -108,6 +110,7 @@ func NewSquare(high, low float64, highDur, lowDur int) *Square {
 	}
 }
 
+// Next returns the next float value.
 func (s *Square) Next() float64 {
 
 	v := s.Low

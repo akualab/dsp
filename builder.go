@@ -6,6 +6,7 @@
 package dsp
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 
@@ -161,7 +162,7 @@ func (b *Builder) Run() {
 		}
 		for _, ch := range node.fromChans {
 			if ch == nil {
-				fmt.Errorf("found a nil output channel in node [%s] - this should not happen, report teh bug", node.name)
+				fmt.Errorf("found a nil output channel in node [%s] - this should not happen, report the bug", node.name)
 			}
 			out = append(out, ch)
 		}
@@ -174,4 +175,20 @@ func (b *Builder) Run() {
 			go runProc(node.proc, in, out, b.App.e)
 		}
 	}
+}
+
+func (b *Builder) String() string {
+
+	var buf bytes.Buffer
+	for name, node := range b.nodes {
+		buf.WriteString(fmt.Sprintf("name: %s, ", name))
+		for i, in := range node.fromChans {
+			buf.WriteString(fmt.Sprintf("len(from[%d]): %d, ", i, len(in)))
+		}
+		for j, out := range node.toChans {
+			buf.WriteString(fmt.Sprintf("len(to[%d]): %d, ", j, len(out)))
+		}
+		buf.WriteString("\n")
+	}
+	return buf.String()
 }

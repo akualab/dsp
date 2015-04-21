@@ -46,13 +46,16 @@ func (f ProcFunc) RunProc(in []FromChan, out []ToChan) error { return f(in, out)
 
 func runProc(p Processor, in []FromChan, out []ToChan, e *procErrors) {
 	e.record(p.RunProc(in, out))
-	CloseOutputs(out)
+	//	CloseOutputs(out)
 }
 
-// Sequence is a helper method that returns a processor that is the
+// Pipeline is a helper method that returns a processor that is the
 // concatenation of all processor arguments.
 // The output of a processor is fed as input to the next processor.
-func (app *App) Sequence(procs ...Processor) Processor {
+func (app *App) Pipeline(procs ...Processor) Processor {
+	if len(procs) == 0 {
+		panic("no procs parameters in argument list for Pipeline")
+	}
 	if len(procs) == 1 {
 		return procs[0]
 	}
@@ -73,11 +76,12 @@ func (app *App) Sequence(procs ...Processor) Processor {
 // Run executes a sequence of processors.
 // It returns either nil, an error if any processor reported an error.
 func (app *App) Run(procs ...Processor) FromChan {
-	p := app.Sequence(procs...)
-	in := app.Wire()
-	close(in)
+	p := app.Pipeline(procs...)
+	//	in := app.Wire()
+	//	close(in)
 	out := app.Wire()
-	app.ConnectOne(p, out, in)
+	//	app.ConnectOne(p, out, in)
+	app.ConnectOne(p, out, nil)
 
 	return out
 }
@@ -89,6 +93,7 @@ type App struct {
 	// Default buffer size for connecting channels.
 	BufferSize int
 	e          *procErrors
+	toChans    []ToChan
 }
 
 // NewApp returns a new app.
@@ -96,17 +101,19 @@ func NewApp(name string, bufferSize int) *App {
 	return &App{Name: name,
 		e:          &procErrors{},
 		BufferSize: bufferSize,
+		toChans:    []ToChan{},
 	}
 }
 
 // Connect connects multiple inputs and outputs to a processor.
 func (app *App) Connect(p Processor, in []FromChan, out []ToChan) {
+	app.toChans = append(app.toChans, out...)
 	go runProc(p, in, out, app.e)
 }
 
 // ConnectOne connects multiple inputs and one output to a processor.
 func (app *App) ConnectOne(p Processor, out ToChan, ins ...FromChan) {
-	//go runProc(p, PIO{Out: []ToChan{out}, In: ins}, app.e)
+	app.toChans = append(app.toChans, out)
 	go runProc(p, ins, []ToChan{out}, app.e)
 }
 
@@ -117,7 +124,15 @@ func (app *App) Error() error {
 
 // Wire creates a channel for wiring processors.
 func (app *App) Wire() chan Value {
-	return make(chan Value, app.BufferSize)
+	c := make(chan Value, app.BufferSize)
+	return c
+}
+
+// Close all channels.
+func (app *App) Close() {
+	for _, c := range app.toChans {
+		close(c)
+	}
 }
 
 // CloseOutputs closes all the output channels.
@@ -155,4 +170,17 @@ func (e *procErrors) getError() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.err
+}
+
+// ValueOK is a helper function that waits for value on the "in" channel. Returns false if "in" channel is closed.
+func ValueOK(in FromChan) (Value, bool) {
+	var v Value
+	var ok bool
+	select {
+	case v, ok = <-in:
+		if !ok {
+			return nil, false
+		}
+		return v, true
+	}
 }

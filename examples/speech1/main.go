@@ -34,7 +34,7 @@ func main() {
 	print := true
 
 	// Create a processor to compute mel-cepstrum. We chain various processors.
-	cepstrum := app.Sequence(
+	cepstrum := app.Pipeline(
 		dsp.Reader(r, c),
 		dsp.Window(windowSize).Use(dsp.Hamming),
 		dsp.SpectralEnergy(logFFTSize),

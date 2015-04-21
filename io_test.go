@@ -27,9 +27,13 @@ func TestBasicReader(t *testing.T) {
 		t.Fatalf("error: %s", app.Error())
 	}
 
-	for v := range out {
-		_ = v
-	}
+	//	for v := range out {
+	//		_ = v
+	//	}
+
+	v := <-out
+	t.Log(v)
+
 }
 
 func TestTextReader(t *testing.T) {
@@ -72,4 +76,6 @@ func TestTextReader(t *testing.T) {
 	actual = v[4]
 	expected = 6.0
 	CompareFloats(t, expected, actual, "mismatched values", 0.01)
+
+	t.Log("chan len: ", len(out))
 }
