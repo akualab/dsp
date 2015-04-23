@@ -1,89 +1,96 @@
-// Copyright (c) 2014 AKUALAB INC., All rights reserved.
-//
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package dsp
 
-import "sync"
+import (
+	"bytes"
+	"errors"
+	"fmt"
+)
 
-// Value is the type used to exhcange values between processors.
+// Called a Proc that has no ProcFunc set.
+var ErrNoFunc = errors.New("no ProcFunc set")
+
+// Returned when frame index is out of bounds. Can be used as a termination flag.
+var ErrOOB = errors.New("frame index out of bounds")
+
+// Value is the type used to exchange values between processors.
 type Value []float64
 
-// Copy creates a copy of a Value.
-// Input values should be treated as read-only because
-// they may be shared with other processors.
-func (v Value) Copy() Value {
-	vcopy := make(Value, len(v), len(v))
-	copy(vcopy, v)
-	return vcopy
-}
-
-// ToChan is the type used to send a Value to a channel.
-type ToChan chan<- Value
-
-// FromChan is the type used to receive a Value from a channel.
-type FromChan <-chan Value
-
-// The Processor interface must be implemented by all processors.
-type Processor interface {
-	RunProc(in []FromChan, out []ToChan) error
-}
-
-// The Resetter interface must be implemented by processors that have state that must
-// be reset before processing a new stream.
-type Resetter interface {
+// The Processer interface must be implemented by all processors.
+type Processer interface {
+	Get(uint32) (Value, error)
+	SetInputs(...Processer)
 	Reset()
 }
 
-// ProcFunc is an adapter type that allows the use of ordinary
-// functions as Processors.  If f is a function with the appropriate
-// signature, FilterFunc(f) is a Processor that calls f.
-type ProcFunc func([]FromChan, []ToChan) error
+// ProcFunc is the type used to implement processing functions.
+type ProcFunc func(uint32, ...Processer) (Value, error)
 
-// RunProc calls this function. It implements the Processor interface.
-func (f ProcFunc) RunProc(in []FromChan, out []ToChan) error { return f(in, out) }
-
-func runProc(p Processor, in []FromChan, out []ToChan, e *procErrors) {
-	e.record(p.RunProc(in, out))
-	//	CloseOutputs(out)
+// Proc can be embedded in objects that implement the Processer interface.
+type Proc struct {
+	f      ProcFunc
+	inputs []Processer
+	cache  *cache
 }
 
-// Pipeline is a helper method that returns a processor that is the
-// concatenation of all processor arguments.
-// The output of a processor is fed as input to the next processor.
-func (app *App) Pipeline(procs ...Processor) Processor {
-	if len(procs) == 0 {
-		panic("no procs parameters in argument list for Pipeline")
+// NewProc creates a new Proc.
+func NewProc(bufSize int, f ProcFunc) *Proc {
+	return &Proc{
+		f:     f,
+		cache: newCache(bufSize),
 	}
-	if len(procs) == 1 {
-		return procs[0]
-	}
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-		input := in[0]
-		for _, p := range procs {
-			c := app.Wire()
-			app.ConnectOne(p, c, input)
-			input = c
-		}
-		for v := range input {
-			SendValue(v, out)
-		}
-		return app.Error()
-	})
 }
 
-// Run executes a sequence of processors.
-// It returns either nil, an error if any processor reported an error.
-func (app *App) Run(procs ...Processor) FromChan {
-	p := app.Pipeline(procs...)
-	//	in := app.Wire()
-	//	close(in)
-	out := app.Wire()
-	//	app.ConnectOne(p, out, in)
-	app.ConnectOne(p, out, nil)
+// SetInputs sets the inputs for a processor.
+func (bp *Proc) SetInputs(inputs ...Processer) {
+	bp.inputs = inputs
+}
 
-	return out
+// Reset - override this method to reset the processor state.
+func (bp *Proc) Reset() {
+	bp.cache.clear()
+}
+
+// Get - returns value for index.
+func (bp *Proc) Get(idx uint32) (Value, error) {
+	val, ok := bp.cache.get(idx)
+	if ok {
+		return val, nil
+	}
+	if bp.f != nil {
+		v, e := bp.f(idx, bp.inputs...)
+		if e != nil {
+			return nil, e
+		}
+		bp.cache.set(idx, v)
+		return v, nil
+	}
+	return nil, ErrNoFunc
+}
+
+// SetCache sets the value in the cache.
+func (bp *Proc) SetCache(idx uint32, val Value) {
+	bp.cache.set(idx, val)
+}
+
+// GetCache gets value from cache.
+func (bp *Proc) GetCache(idx uint32) (Value, bool) {
+	val, ok := bp.cache.get(idx)
+	return val, ok
+}
+
+// ClearCache clears the cache.
+func (bp *Proc) ClearCache() {
+	bp.cache.clear()
+}
+
+// Inputs returns the input processors.
+func (bp *Proc) Inputs() []Processer {
+	return bp.inputs
+}
+
+// Input returns one of the processor inputs.
+func (bp *Proc) Input(n int) Processer {
+	return bp.inputs[n]
 }
 
 // App defines a DSP application.
@@ -91,96 +98,91 @@ type App struct {
 	// App name.
 	Name string
 	// Default buffer size for connecting channels.
-	BufferSize int
-	e          *procErrors
-	toChans    []ToChan
+	procs  map[string]Processer
+	inputs map[string][]string
 }
 
 // NewApp returns a new app.
-func NewApp(name string, bufferSize int) *App {
-	return &App{Name: name,
-		e:          &procErrors{},
-		BufferSize: bufferSize,
-		toChans:    []ToChan{},
+func NewApp(name string) *App {
+	return &App{
+		Name:   name,
+		procs:  make(map[string]Processer),
+		inputs: make(map[string][]string),
 	}
 }
 
-// Connect connects multiple inputs and outputs to a processor.
-func (app *App) Connect(p Processor, in []FromChan, out []ToChan) {
-	app.toChans = append(app.toChans, out...)
-	go runProc(p, in, out, app.e)
+func (app *App) mustGet(name string) Processer {
+	proc, ok := app.procs[name]
+	if !ok {
+		panic(fmt.Errorf("no processor named [%s] in builder graph", name))
+	}
+	return proc
 }
 
-// ConnectOne connects multiple inputs and one output to a processor.
-func (app *App) ConnectOne(p Processor, out ToChan, ins ...FromChan) {
-	app.toChans = append(app.toChans, out)
-	go runProc(p, ins, []ToChan{out}, app.e)
+// Tap provides access to values in the processor graph.
+type Tap struct {
+	proc Processer
 }
 
-// Error returns error if any.
-func (app *App) Error() error {
-	return app.e.getError()
-}
-
-// Wire creates a channel for wiring processors.
-func (app *App) Wire() chan Value {
-	c := make(chan Value, app.BufferSize)
-	return c
-}
-
-// Close all channels.
-func (app *App) Close() {
-	for _, c := range app.toChans {
-		close(c)
+// NewTap returns a tap for the output of the named processor.
+func (app *App) NewTap(name string) Tap {
+	return Tap{
+		proc: app.mustGet(name),
 	}
 }
 
-// CloseOutputs closes all the output channels.
-func CloseOutputs(out []ToChan) {
-	for _, o := range out {
-		close(o)
+// Value returns the value for frame index.
+func (t Tap) Get(idx uint32) (Value, error) {
+	return t.proc.Get(idx)
+}
+
+// Add adds a processor with a name.
+func (app *App) Add(name string, p Processer) string {
+	app.procs[name] = p
+	return name
+}
+
+// Connect connects processor inputs. Example:
+//    app.Connect("y", "x1", "x2")
+// the output values of processors with name "x1" and "x2" are
+// inputs to processor names "y".
+func (app *App) Connect(to string, from ...string) {
+
+	inputs := []Processer{}
+	toProc := app.mustGet(to)
+	for _, in := range from {
+		input := app.mustGet(in)
+		inputs = append(inputs, input)
+	}
+	toProc.SetInputs(inputs...)
+	app.inputs[to] = from
+}
+
+// Reset resets all processors in preparation fro a new stream.
+func (app *App) Reset() {
+	for _, p := range app.procs {
+		p.Reset()
 	}
 }
 
-// SendValue sends a value to all the output channels.
-func SendValue(v Value, out []ToChan) {
+func (app *App) String() string {
 
-	for _, o := range out {
-		o <- v
-	}
-}
-
-// procErrors records errors accumulated during the execution of a processor.
-type procErrors struct {
-	mu  sync.Mutex
-	err error
-}
-
-func (e *procErrors) record(err error) {
-	if err != nil {
-		e.mu.Lock()
-		if e.err == nil {
-			e.err = err
+	var buf bytes.Buffer
+	for name, _ := range app.procs {
+		buf.WriteString(fmt.Sprintf("proc: %s, inputs: | ", name))
+		for _, in := range app.inputs[name] {
+			buf.WriteString(fmt.Sprintf("%s | ", in))
 		}
-		e.mu.Unlock()
+		buf.WriteString("\n")
 	}
+	return buf.String()
 }
 
-func (e *procErrors) getError() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.err
-}
-
-// ValueOK is a helper function that waits for value on the "in" channel. Returns false if "in" channel is closed.
-func ValueOK(in FromChan) (Value, bool) {
-	var v Value
-	var ok bool
-	select {
-	case v, ok = <-in:
-		if !ok {
-			return nil, false
-		}
-		return v, true
-	}
+// Copy creates a copy of the value.
+// Input values should be treated as read-only because
+// they may be shared with other processors.
+func (v Value) Copy() Value {
+	vcopy := make(Value, len(v), len(v))
+	copy(vcopy, v)
+	return vcopy
 }

@@ -12,72 +12,63 @@ import (
 	"github.com/gonum/floats"
 )
 
+const defaultBufSize = 100
+
 // AddScaled adds frames from all inputs and scales the added values.
-// Blocks until all input frames are available.
 // Will panic if input frame sizes don't match.
-func AddScaled(size int, alpha float64) Processor {
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
+func AddScaled(size int, alpha float64) Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 		numInputs := len(in)
-		for {
-			v := make(Value, size, size)
-			for i := 0; i < numInputs; i++ {
-
-				w, ok := ValueOK(in[i])
-				if !ok {
-					return nil
-				}
-				floats.Add(v, w)
+		v := make(Value, size, size)
+		for i := 0; i < numInputs; i++ {
+			vec, err := in[i].Get(idx)
+			if err != nil {
+				return nil, err
 			}
-			floats.Scale(alpha, v)
-			SendValue(v, out)
+			floats.Add(v, vec)
 		}
+		floats.Scale(alpha, v)
+		return v, nil
 	})
 }
 
 // Sub subtracts input[1] from input[0].
-// Blocks until all input frames are available.
 // Will panic if input frame sizes don't match.
-func Sub() Processor {
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
+func Sub() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 		if len(in) != 2 {
-			return fmt.Errorf("proc has %d inputs, expected 2", len(in))
+			return nil, fmt.Errorf("proc has %d inputs, expected 2", len(in))
 		}
-		for {
-			a, aok := ValueOK(in[0])
-			if !aok {
-				return nil
-			}
-			b, bok := ValueOK(in[1])
-			if !bok {
-				return nil
-			}
-			v := make(Value, len(a), len(a))
-			copy(v, a)
-			floats.Sub(v, b)
-			SendValue(v, out)
+		vec0, e0 := in[0].Get(idx)
+		if e0 != nil {
+			return nil, e0
 		}
+		vec1, e1 := in[1].Get(idx)
+		if e1 != nil {
+			return nil, e1
+		}
+		dim := len(vec0)
+		v := make(Value, dim, dim)
+		copy(v, vec0)
+		floats.Sub(v, vec1)
+		return v, nil
 	})
 }
 
 // Join stacks multiple input vectors into a single vector. Output vector size equals sum of input vector sizes.
 // Blocks until all input vectors are available.
-func Join() Processor {
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
+func Join() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 		numInputs := len(in)
-		for {
-			v := Value{}
-			for i := 0; i < numInputs; i++ {
-				w, ok := ValueOK(in[i])
-				if !ok {
-					return nil
-				}
-				v = append(v, w...)
+		v := Value{}
+		for i := 0; i < numInputs; i++ {
+			vec, err := in[i].Get(idx)
+			if err != nil {
+				return nil, err
 			}
-			SendValue(v, out)
+			v = append(v, vec...)
 		}
+		return v, nil
 	})
 }
 
@@ -85,21 +76,19 @@ func Join() Processor {
 // See dsp.RealFT and dsp.DFTEnergy for details.
 // The size of the output vector is 2^logSize.
 // The real fft size computed is 2 * frame_size.
-func SpectralEnergy(logSize uint) Processor {
+func SpectralEnergy(logSize uint) Processer {
 	fs := 1 << logSize // output frame size
 	dftSize := 2 * fs
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-		for {
-			data, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
-			dft := make(Value, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
-			copy(dft, data)                      // zero padded
-			RealFT(dft, dftSize, true)
-			egy := DFTEnergy(dft)
-			SendValue(egy, out)
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		dft := make(Value, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
+		vec, err := in[0].Get(idx)
+		if err != nil {
+			return nil, err
 		}
+		copy(dft, vec) // zero padded
+		RealFT(dft, dftSize, true)
+		egy := DFTEnergy(dft)
+		return egy, nil
 	})
 }
 
@@ -130,58 +119,47 @@ var (
 )
 
 // Filterbank computes filterbank energies using the provided indices and coefficients.
-func Filterbank(indices []int, coeff [][]float64) Processor {
+func Filterbank(indices []int, coeff [][]float64) Processer {
 	nf := len(indices) // num filterbanks
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
-		for {
-			input, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
-			fb := make(Value, nf, nf)
-			for i := 0; i < nf; i++ {
-				for k := 0; k < len(coeff[i]); k++ {
-					fb[i] += coeff[i][k] * input[indices[i]+k]
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		fb := make(Value, nf, nf)
+		for i := 0; i < nf; i++ {
+			for k := 0; k < len(coeff[i]); k++ {
+				vec, err := in[0].Get(idx)
+				if err != nil {
+					return nil, err
 				}
+				fb[i] += coeff[i][k] * vec[indices[i]+k]
 			}
-			SendValue(fb, out)
 		}
+		return fb, nil
 	})
 }
 
 // Log returns the natural logarithm of the input.
-func Log() Processor {
-
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
-		for {
-			data, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
-			size := len(data)
-			v := make(Value, size, size)
-			for k, w := range data {
-				v[k] = math.Log(w)
-			}
-			SendValue(v, out)
+func Log() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		vec, err := in[0].Get(idx)
+		if err != nil {
+			return nil, err
 		}
+		size := len(vec)
+		v := make(Value, size, size)
+		for k, w := range vec {
+			v[k] = math.Log(w)
+		}
+		return v, nil
 	})
 }
 
 // Sum returns the sum of the elements of the input frame.
-func Sum() Processor {
-
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
-		for {
-			data, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
-			SendValue(Value{floats.Sum(data)}, out)
+func Sum() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		vec, err := in[0].Get(idx)
+		if err != nil {
+			return nil, err
 		}
+		return Value{floats.Sum(vec)}, nil
 	})
 }
 
@@ -192,63 +170,62 @@ MaxNorm returns a norm value as follows:
   define: norm(v) as sqrt(v . v) where "." is the dot product.
 
   max[n] = max(y[n], norm(x[n])
+
+The max value is computed in the range {0...idx}
 */
-func MaxNorm(alpha float64) Processor {
-
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-
+func MaxNorm(bufSize int, alpha float64) Processer {
+	return NewProc(bufSize, func(idx uint32, in ...Processer) (Value, error) {
+		max := 0.0
 		norm := 0.0
-		for {
-			v, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
+		var i uint32
+		for ; i <= idx; i++ {
 			y := norm * alpha
-			norm = math.Sqrt(floats.Dot(v, v))
-			max := math.Max(y, norm)
-			SendValue(Value{max}, out)
+			vec, err := in[0].Get(idx)
+			if err != nil {
+				return nil, err
+			}
+			norm = math.Sqrt(floats.Dot(vec, vec))
+			max = math.Max(y, norm)
 		}
+		return Value{max}, nil
 	})
 }
 
 // DCT returns the Discrete Cosine Transform of the input vector.
-func DCT(inSize, outSize int) Processor {
+func DCT(inSize, outSize int) Processer {
 
 	dct := GenerateDCT(outSize+1, inSize)
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-		for {
-			input, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 
-			size := len(input)
-			if inSize != size {
-				return fmt.Errorf("mismatch in size [%d] and input frame size [%d]", inSize, size)
-			}
-			v := make(Value, outSize, outSize)
-
-			for i := 1; i <= outSize; i++ {
-				for j := 0; j < inSize; j++ {
-					v[i-1] += input[j] * dct[i][j]
-				}
-			}
-			SendValue(v, out)
+		input, err := in[0].Get(idx)
+		if err != nil {
+			return nil, err
 		}
+		size := len(input)
+		if inSize != size {
+			return nil, fmt.Errorf("mismatch in size [%d] and input frame size [%d]", inSize, size)
+		}
+		v := make(Value, outSize, outSize)
+		for i := 1; i <= outSize; i++ {
+			for j := 0; j < inSize; j++ {
+				v[i-1] += input[j] * dct[i][j]
+			}
+		}
+		return v, nil
 	})
 }
 
 /*
-MovingAverage computes the average for the last M samples.
+MAProc computes the average for the last M samples.
 
   for i >= M:
                   i
-  AVG=G[i] = 1/M * sum X[j]
-                 j=i-M
+  AVG[i] = 1/M * sum X[j]
+                 j=i-M+1
 
   for 0 < i < M
                   i
-  AVG[i] = 1/i * sum X[j]
+  AVG[i] = 1/(i+1) * sum X[j]
                  j=0
 
   Where AVG is the output vector and X is the input vector.
@@ -257,126 +234,118 @@ Will panic if output size is different from input size.
 If param avg in not nil, it will be used as the initial avg
 for i < M.
 */
-func MovingAverage(outSize, winSize int, avg Value) Processor {
-
-	return ProcFunc(func(in []FromChan, out []ToChan) error {
-		sum := make(Value, outSize, outSize)
-		buf := make([]Value, winSize, winSize)
-		var i uint32
-		for {
-			input, ok := ValueOK(in[0])
-			if !ok {
-				return nil
-			}
-
-			v := movingSum(int(i%uint32(winSize)), buf, sum, input)
-			if i >= uint32(winSize) {
-				floats.Scale(1.0/float64(winSize), v)
-			} else if len(avg) == 0 {
-				floats.Scale(1.0/float64(i+1), v)
-			} else {
-				copy(v, avg)
-			}
-			SendValue(v, out)
-			i++
-		}
-	})
+type MAProc struct {
+	dim, bufSize int
+	winSize      uint32
+	*Proc
 }
 
-// Updates sum by subtracting oldest sample and adding newest.
-func movingSum(p int, buf []Value, sum, data Value) Value {
-
-	// Replace oldest value in buffer with newest value.
-	old := buf[p]
-	buf[p] = data
-
-	// Subtract oldest, add newest.
-	if old != nil {
-		floats.Sub(sum, old)
+// NewMAProc creates a new MA processor.
+func NewMAProc(dim, winSize, bufSize int) *MAProc {
+	ma := &MAProc{
+		dim:     dim,
+		bufSize: bufSize,
+		winSize: uint32(winSize),
+		Proc:    NewProc(bufSize, nil),
 	}
-	floats.Add(sum, data)
-	return sum.Copy()
+	return ma
+}
+
+// Get implements the dsp.Processer interface.
+func (ma *MAProc) Get(idx uint32) (Value, error) {
+	val, ok := ma.GetCache(idx)
+	if ok {
+		return val, nil
+	}
+
+	c := 1.0 / float64(ma.winSize)
+	start := idx - ma.winSize + 1
+	if idx < ma.winSize {
+		c = 1.0 / float64(idx+1)
+		start = 0
+	}
+	sum := make([]float64, ma.dim, ma.dim)
+	// TODO: no need to add every time, use a circular buffer.
+	for j := start; j <= idx; j++ {
+		v, e := ma.Input(0).Get(j)
+		if e != nil {
+			return nil, e
+		}
+		floats.Add(sum, v)
+	}
+	floats.Scale(c, sum)
+	ma.SetCache(idx, sum)
+	return sum, nil
 }
 
 /*
 DiffProc computes a weighted difference between samples as follows:
 
+    for delta < i < N-delta-1:
+
              delta-1
     diff[i] = sum c_j * { x[i+j+1] - x[i-j-1] }
               j=0
 
-   delta-1
-    sum {c_j} = 1.0
-    j=0
+    where x is the input data stream, i is the frame index. and N
+    is the number of frames. For other frame indices replace delta with:
 
-Note that this operation in non-causal and will result in a delay
-of delta samples.
+    for i <= delta : delta' = i  AND  for i >= N-delta-1: delta' = N-1-i
 
-Param "size" must match the size of the input vectors.
+Param "dim" must match the size of the input vectors.
 Param "coeff" is the slice of coefficients.
 */
 type DiffProc struct {
-	size    int
-	bufSize int
-	delta   int
-	buf     []Value
-	coeff   []float64
+	dim       int
+	delta     int
+	buf       []Value
+	coeff     []float64
+	cacheSize int
+	cache     *cache
+	*Proc
 }
 
 // NewDiffProc returns a new diff processor.
-func NewDiffProc(size int, coeff []float64) *DiffProc {
+func NewDiffProc(dim, bufSize int, coeff []float64) *DiffProc {
 	delta := len(coeff)
-	bufSize := 2*delta + 1
 	dp := &DiffProc{
-		delta:   delta,
-		bufSize: bufSize,
-		buf:     make([]Value, bufSize, bufSize),
-		size:    size,
-		coeff:   coeff,
-	}
-	// Init circular buffer with zero values.
-	for j := range dp.buf {
-		dp.buf[j] = make(Value, size, size)
+		delta: delta,
+		dim:   dim,
+		coeff: coeff,
+		Proc:  NewProc(bufSize, nil),
 	}
 	return dp
 }
 
-// Reset the DiffProc processor. Prepares the processor for a new stream.
-func (dp *DiffProc) Reset() {
-	for i, vec := range dp.buf {
-		for j := range vec {
-			dp.buf[j][i] = 0
-		}
+// Get implements the dsp.Processer interface.
+func (dp *DiffProc) Get(idx uint32) (Value, error) {
+
+	val, ok := dp.GetCache(idx)
+	if ok {
+		return val, nil
 	}
-}
 
-// RunProc implements the dsp.Processor interface.
-func (dp *DiffProc) RunProc(in []FromChan, out []ToChan) error {
-
-	i := 0
-	for {
-		input, ok := ValueOK(in[0])
-		if !ok {
-			return nil
+	sum := make([]float64, dp.dim, dp.dim)
+	var j uint32
+	for ; j < uint32(dp.delta); j++ {
+		plus, ep := dp.Input(0).Get(idx + j + 1)
+		if ep == ErrOOB {
+			break
 		}
-
-		if len(input) != dp.size {
-			return fmt.Errorf("input vector size %d does not match size %d", len(input), dp.size)
+		if ep != nil {
+			return nil, ep
 		}
-		// Store the input vector in the buffer.
-		// Should be safe to store a reference if we follow
-		// the convention to treat input vectors as read only.
-		dp.buf[i] = input
-		v := make(Value, dp.size, dp.size)
-		for j := 0; j < dp.delta; j++ {
-			minus := Modulo(i-j-1, dp.bufSize)
-			plus := Modulo(i+j+1, dp.bufSize)
-			floats.AddScaled(v, -dp.coeff[j], dp.buf[minus])
-			floats.AddScaled(v, dp.coeff[j], dp.buf[plus])
-			// fmt.Printf("i:%4d, j:%d, in:%3.f, buf[%d]:%.f, buf[%d]:%.f, v:%3.f, coeff:%.f\n", i, j, input[0], plus, buf[plus][0], minus, buf[minus][0], v[0], coeff[j])
+		minus, em := dp.Input(0).Get(idx - j - 1)
+		if em == ErrOOB {
+			break
 		}
-		SendValue(v, out)
-		i++
-		i = i % dp.bufSize
+		if em != nil {
+			return nil, em
+		}
+		floats.AddScaled(sum, dp.coeff[j], plus)
+		floats.AddScaled(sum, -dp.coeff[j], minus)
 	}
+
+	dp.SetCache(idx, sum)
+	return sum, nil
 }

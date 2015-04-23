@@ -1,213 +1,33 @@
-// Copyright (c) 2014 AKUALAB INC., All rights reserved.
-//
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package dsp
 
-import (
-	"os"
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestValueOK(t *testing.T) {
+func numbers(idx uint32, in ...Processer) (Value, error) {
+	return Value{float64(idx)}, nil
+}
 
-	value := Value{1, 2, 3}
-	in := make(chan Value)
-	flag := 0
-	go func() {
-		for {
-			select {
-			case v, ok := <-in:
-				if ok {
-					t.Log(v)
-					flag = 1
-				} else {
-					t.Log("closed")
-					flag = 2
-					in = nil
-					return
-				}
-			}
+func square(idx uint32, in ...Processer) (Value, error) {
+	v, err := in[0].Get(idx)
+	if err != nil {
+		return nil, err
+	}
+	return Value{v[0] * v[0]}, nil
+}
+
+func TestGraph(t *testing.T) {
+
+	app := NewApp("test")
+	app.Add("numbers", NewProc(10, numbers))
+	app.Add("square", NewProc(10, square))
+	app.Connect("square", "numbers")
+	sq := app.NewTap("square")
+
+	var i uint32
+	for ; i < 10; i++ {
+		v, err := sq.Get(i)
+		if err != nil {
+			t.Fatal(err)
 		}
-	}()
-
-	t.Log(flag)
-	in <- value
-	t.Log(flag)
-	close(in)
-	for {
-		time.Sleep(1)
-		if in == nil {
-			break
-		}
+		t.Log(i, v)
 	}
-	t.Log(flag)
-
-}
-
-func TestBasic(t *testing.T) {
-
-	app := NewApp("Test", 1000)
-
-	p1 := Source(4, 10).Use(NewNormal(88, 10, 2))
-	w1 := app.Wire()
-	app.ConnectOne(p1, w1)
-
-	p2 := WriteValues(os.Stdout, testing.Verbose())
-	w2 := app.Wire()
-	app.ConnectOne(p2, w2, w1)
-
-	v := <-w2
-	t.Log(v)
-	app.Close()
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
-	}
-}
-
-func TestWindow(t *testing.T) {
-
-	app := NewApp("Test Window", 1000)
-
-	p1 := Source(64, 2).Use(NewSquare(1, 0, 4, 4))
-
-	w1 := app.Wire()
-	app.ConnectOne(p1, w1)
-
-	p2 := Window(64).Use(Hamming)
-	w2 := app.Wire()
-	app.ConnectOne(p2, w2, w1)
-
-	p3 := WriteValues(os.Stdout, testing.Verbose())
-	w3 := app.Wire()
-	app.ConnectOne(p3, w3, w2)
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
-	}
-
-	// get a vector
-	v := <-w3
-
-	// check value
-	hamming := HammingWindow(64)
-
-	actual := v[0]
-	expected := hamming[0]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[4]
-	expected = 0.0
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[57]
-	expected = hamming[57]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-}
-
-func TestChain(t *testing.T) {
-
-	app := NewApp("Test Chain", 1000)
-
-	out := app.Run(
-		Source(64, 2).Use(NewSquare(1, 0, 4, 4)),
-		Window(64).Use(Hamming),
-		WriteValues(os.Stdout, testing.Verbose()),
-	)
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
-	}
-
-	// get a vector
-	v := <-out
-
-	// check value
-	hamming := HammingWindow(64)
-
-	actual := v[0]
-	expected := hamming[0]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[4]
-	expected = 0.0
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[57]
-	expected = hamming[57]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	app.Close()
-}
-
-func TestTwoWindows(t *testing.T) {
-
-	app := NewApp("Test Two Windows", 1000)
-
-	p1 := Source(64, 2).Use(NewSquare(1, 0, 4, 4))
-
-	w1a := app.Wire()
-	w1b := app.Wire()
-	out1 := []ToChan{w1a, w1b}
-	app.Connect(p1, []FromChan{}, out1)
-
-	p2a := Window(64).Use(Hamming)
-	w2a := app.Wire()
-	app.ConnectOne(p2a, w2a, w1a)
-
-	p2b := Window(64).Use(Blackman)
-	w2b := app.Wire()
-	app.ConnectOne(p2b, w2b, w1b)
-
-	p3a := WriteValues(os.Stdout, testing.Verbose())
-	w3a := app.Wire()
-	app.ConnectOne(p3a, w3a, w2a)
-
-	p3b := WriteValues(os.Stdout, testing.Verbose())
-	w3b := app.Wire()
-	app.ConnectOne(p3b, w3b, w2b)
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
-	}
-
-	// get a vector from the Hamming window.
-	v := <-w3a
-
-	// check value
-	hamming := HammingWindow(64)
-
-	actual := v[0]
-	expected := hamming[0]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[4]
-	expected = 0.0
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[57]
-	expected = hamming[57]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	// get a vector from the Blackman window.
-	v = <-w3b
-
-	// check value
-	blackman := BlackmanWindow(64)
-
-	actual = v[0]
-	expected = blackman[0]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[4]
-	expected = 0.0
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
-	actual = v[57]
-	expected = blackman[57]
-	CompareFloats(t, expected, actual, "mismatched values in hamming window", 0.01)
-
 }

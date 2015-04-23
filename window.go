@@ -27,6 +27,7 @@ type WindowProc struct {
 	WindowType int
 	data       []float64
 	err        error
+	inputs     []Processer
 }
 
 // Window returns a window processor with a rectangular shape.
@@ -57,29 +58,34 @@ func (win *WindowProc) Use(windowType int) *WindowProc {
 	return win
 }
 
-// RunProc implements the dsp.Processor interface.
-func (win *WindowProc) RunProc(in []FromChan, out []ToChan) error {
-	if win.err != nil {
-		return win.err
-	}
-	for in := range in[0] {
+// SetInputs for this processor.
+func (win *WindowProc) SetInputs(in ...Processer) {
+	win.inputs = in
+}
 
-		inSize := len(in)
-		if win.WinSize > inSize {
-			return fmt.Errorf("window size [%d] is larger than input vector size [%d]", win.WinSize, inSize)
-		}
-		v := make(Value, win.WinSize, win.WinSize)
-		if win.WindowType == Rectangular {
-			copy(v, in)
-		} else {
-			// Multiply by data in slice.
-			for i, _ := range win.data {
-				v[i] = in[i] * win.data[i]
-			}
-		}
-		SendValue(v, out)
+// Reset WindowProc processor.
+func (win *WindowProc) Reset() {}
+
+// Get implements the dsp.Processer interface.
+func (win *WindowProc) Get(idx uint32) (Value, error) {
+	vec, err := win.inputs[0].Get(idx)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	inSize := len(vec)
+	if win.WinSize > inSize {
+		return nil, fmt.Errorf("window size [%d] is larger than input vector size [%d]", win.WinSize, inSize)
+	}
+	v := make(Value, win.WinSize, win.WinSize)
+	if win.WindowType == Rectangular {
+		copy(v, vec)
+	} else {
+		// Multiply by data in slice.
+		for i, _ := range win.data {
+			v[i] = vec[i] * win.data[i]
+		}
+	}
+	return v, nil
 }
 
 // HanningWindow returns a Hanning window.

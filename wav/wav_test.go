@@ -2,6 +2,8 @@ package wav
 
 import (
 	"testing"
+
+	"github.com/akualab/dsp"
 )
 
 func TestJSONStreamer(t *testing.T) {
@@ -77,8 +79,8 @@ func TestBounds(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error for frame 11, got %v", frame)
 		}
-		if err != ErrOutOfBounds {
-			t.Fatalf("expected ErrOutOfBounds got %s", err)
+		if err != dsp.ErrOOB {
+			t.Fatalf("expected [%s] got %s", dsp.ErrOOB, err)
 		}
 	}
 	e := iter.Close()

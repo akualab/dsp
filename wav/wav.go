@@ -16,9 +16,6 @@ import (
 // Done is returned as the error value when there are no more waveforms available in the stream.
 var Done = errors.New("no more json objects")
 
-// ErrOutOfBounds is returned when the frame index is out of bounds.
-var ErrOutOfBounds = errors.New("frame index out of bounds")
-
 // A Waveform format for reading json files.
 type Waveform struct {
 	// ID is a waveform identifier.
@@ -118,10 +115,10 @@ func (w *Waveform) Frame(idx int) (dsp.Value, error) {
 	start := idx * w.stepSize
 	end := start + w.frameSize
 	if start < 0 || start >= n {
-		return nil, ErrOutOfBounds
+		return nil, dsp.ErrOOB
 	}
 	if end < 1 || end >= n {
-		return nil, ErrOutOfBounds
+		return nil, dsp.ErrOOB
 	}
 	return dsp.Value(w.Samples[start:end]), nil
 }

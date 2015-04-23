@@ -6,167 +6,140 @@
 package dsp
 
 import (
+	"fmt"
 	"os"
-	"strings"
 	"testing"
 )
 
 func TestAddScaled(t *testing.T) {
 
-	const input = "0.0\t\t\n1 2 3.0 4\n5\t6.00 7\n\n8 9 10 11 12 13 14\n"
-	r1 := strings.NewReader(input)
-	r2 := strings.NewReader(input)
+	dim := 2
+	app := NewApp("Test")
 
-	app := NewApp("Test Reader", 10)
+	app.Add("s1", Source(dim, 20, NewRandom(99)))
+	app.Add("s2", Source(dim, 20, NewRandom(99)))
+	app.Add("p1", AddScaled(dim, 0.5))
+	app.Add("p2", WriteValues(os.Stdout, testing.Verbose()))
 
-	p1 := Reader(r1, NewReader(4))
-	p2 := Reader(r2, NewReader(4))
-	p3 := AddScaled(4, 1.5)
-	p4 := WriteValues(os.Stdout, testing.Verbose())
+	app.Connect("p1", "s1", "s2")
+	app.Connect("p2", "p1")
 
-	w1 := app.Wire()
-	w2 := app.Wire()
-	w3 := app.Wire()
-	w4 := app.Wire()
+	s1 := app.NewTap("s1")
+	s2 := app.NewTap("s2")
+	out := app.NewTap("p2")
+	var i uint32
+	for ; i < 10; i++ {
+		v1, _ := s1.Get(i)
+		v2, _ := s2.Get(i)
+		t.Log(v1, v2)
 
-	out1 := []ToChan{w1}
-	app.Connect(p1, []FromChan{}, out1)
-
-	out2 := []ToChan{w2}
-	app.Connect(p2, []FromChan{}, out2)
-
-	//	Connect two inputs and one output.
-	app.ConnectOne(p3, w3, w1, w2)
-
-	//	Connect one inputs and one output.
-	app.ConnectOne(p4, w4, w3)
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
+		exp := []float64{}
+		for i, _ := range v1 {
+			exp = append(exp, (v1[i]+v2[i])*0.5)
+		}
+		v, e := out.Get(i)
+		if e != nil {
+			t.Fatal(e)
+		}
+		CompareSliceFloat(t, exp, v, "mismatch", 0.001)
+		t.Log(v)
 	}
-
-	v := <-w4
-	actual := v[3]
-	expected := 9.0
-	CompareFloats(t, expected, actual, "mismatched values", 0.01)
-
-	v = <-w4
-	actual = v[3]
-	expected = 21.0
-	CompareFloats(t, expected, actual, "mismatched values", 0.01)
-
 }
 
 func TestJoin(t *testing.T) {
 
-	const input = "0.0\t\t\n1 2 3.0 4\n5\t6.00 7\n\n8 9 10 11 12 13 14\n"
-	r1 := strings.NewReader(input)
-	r2 := strings.NewReader(input)
+	dim := 4
+	app := NewApp("Test")
 
-	app := NewApp("Test Reader", 10)
+	app.Add("s1", Source(dim, 40, NewCounter()))
+	app.Add("s2", Source(dim, 40, NewCounter()))
+	app.Add("join", Join())
 
-	p1 := Reader(r1, NewReader(4))
-	p2 := Reader(r2, NewReader(4))
-	p3 := Join()
-	p4 := WriteValues(os.Stdout, testing.Verbose())
-
-	w1 := app.Wire()
-	w2 := app.Wire()
-	w3 := app.Wire()
-	w4 := app.Wire()
-
-	out1 := []ToChan{w1}
-	app.Connect(p1, []FromChan{}, out1)
-	out2 := []ToChan{w2}
-	app.Connect(p2, []FromChan{}, out2)
-	app.ConnectOne(p3, w3, w1, w2)
-	app.ConnectOne(p4, w4, w3)
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
-	}
-
-	v := <-w4
-	actual := v[3]
-	expected := 3.0
-	CompareFloats(t, expected, actual, "mismatched values", 0.01)
-
-	actualSize := len(v)
-	expectedSize := 8
-	if actualSize != expectedSize {
-		t.Fatalf("mismatched length: %d vs. %d", actualSize, expectedSize)
-	}
-
-	actual = v[7]
-	expected = 3
-	CompareFloats(t, expected, actual, "mismatched values", 0.01)
-
-	v = <-w4
-	actual = v[6]
-	expected = 6.0
-	CompareFloats(t, expected, actual, "mismatched values", 0.01)
-
-	actualSize = len(v)
-	expectedSize = 8
-	if actualSize != expectedSize {
-		t.Fatalf("mismatched length: %d vs. %d", actualSize, expectedSize)
+	app.Connect("join", "s1", "s2")
+	out := app.NewTap("join")
+	for k := 0; k < 2; k++ {
+		var i uint32
+		for ; i < 20; i++ {
+			v, e := out.Get(i)
+			t.Log(v)
+			if e != nil {
+				t.Fatal(e)
+			}
+			for j := 0; j < dim; j++ {
+				if v[j] != v[j+dim] {
+					t.Fatalf("mismatch j:%d, v1:%f, v2%f", j, v[j], v[j+dim])
+				}
+				if v[j] != float64(int(i)*dim+j) {
+					t.Fatalf("mismatch j:%d, v1:%f, v2%f", j, v[j], float64(int(i)*dim+j))
+				}
+			}
+		}
 	}
 }
 
 func TestMovingAverage(t *testing.T) {
 
-	const input = "1 3 5 3 1 3 13 -5 -3 -5"
+	input := []float64{1, 3, 5, 3, 1, 3, 13, -5, -3, -5}
 
 	// expected output for winSize=4
 	expected := []float64{1, 2, 3, 3, 3, 3, 5, 3, 2, 0}
 
-	r := strings.NewReader(input)
+	app := NewApp("Test MA")
+	app.Add("source", Source(1, len(input), NewSlice(input)))
+	app.Add("moving average", NewMAProc(1, 4, 20))
 
-	app := NewApp("Test MA", 10)
+	app.Connect("moving average", "source")
+	out := app.NewTap("moving average")
 
-	out := app.Run(
-		Reader(r, NewReader(1)),
-		MovingAverage(1, 4, nil),
-		WriteValues(os.Stdout, testing.Verbose()),
-	)
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
+	app.Reset()
+	var i uint32
+	for ; i < uint32(len(input)); i++ {
+		v, e := out.Get(i)
+		if e != nil {
+			t.Fatal(e)
+		}
+		t.Log(i, v)
+		if v[0] != expected[i] {
+			t.Fatalf("expected %f, got %f", expected[i], v)
+		}
 	}
-
-	for _, v := range expected {
-		actual := <-out
-		CompareFloats(t, v, actual[0], "mismatched values", 0.01)
-	}
+	app.Reset()
 }
 
 func TestDiff(t *testing.T) {
 
-	const input = "1 1 7 6 5 2 2 3 4 5 -1"
+	input := []float64{1, 1, 7, 6, 5, 2, 2, 3, 4, 5, -1}
 
 	// expected output for winSize=4
-	expected := []float64{0, 0, -1, 0, -6, 1, 1, 3, 0, -1, -1}
+	expected := []float64{0, 0, 4, 1, -5, -3, -1, 3, -3, 0, 0}
+	coeff := []float64{0, 1}
+	app := NewApp("Test Diff")
+	app.Add("source", Source(1, len(input), NewSlice(input)))
+	app.Add("diff", NewDiffProc(1, 20, coeff))
 
-	r := strings.NewReader(input)
+	app.Connect("diff", "source")
+	out := app.NewTap("diff")
 
-	app := NewApp("Test Diff", 10)
-	out := app.Run(
-		Reader(r, NewReader(1)),
-		NewDiffProc(1, []float64{0, 1}),
-		WriteValues(os.Stdout, testing.Verbose()),
-	)
+	app.Reset()
+	var i uint32
+	for ; i < uint32(len(input)); i++ {
+		v, e := out.Get(i)
+		if e == ErrOOB {
 
-	//	for v := range out {
-	//		fmt.Printf("%v\n", v)
-	//	}
-
-	for _, v := range expected {
-		actual := <-out
-		CompareFloats(t, v, actual[0], "mismatched values", 0.01)
+			if int(i) == len(input)-len(coeff) {
+				t.Log("clean end")
+				break
+			} else {
+				t.Fatal(fmt.Errorf("bad termination, expected i=%d, got i=%d", len(input)-len(coeff), i))
+			}
+		}
+		if e != nil {
+			t.Fatal(e)
+		}
+		t.Log(i, v)
+		if v[0] != expected[i] {
+			t.Fatalf("expected %f, got %f", expected[i], v)
+		}
 	}
-
-	if app.Error() != nil {
-		t.Fatalf("error: %s", app.Error())
-	}
-
+	app.Reset()
 }

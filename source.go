@@ -14,37 +14,75 @@ type NumberReader interface {
 
 // SourceProc is a processor that generates data.
 type SourceProc struct {
-	nr           NumberReader
-	length, size int
+	nr   NumberReader
+	dim  int
+	data []Value
 }
 
 // Source returns a data generator processor.
 // Uses a Random number generator with values between
 // 0 and 1 by default.
-func Source(size, length int) *SourceProc {
-	return &SourceProc{
-		nr:     NewRandom(99),
-		length: length,
-		size:   size,
-	}
-}
-
-// Use sets the desire type of data generator.
-func (s *SourceProc) Use(nr NumberReader) *SourceProc {
-	s.nr = nr
-	return s
-}
-
-// RunProc implements the dsp.Processor interface.
-func (s *SourceProc) RunProc(in []FromChan, out []ToChan) error {
-	for i := 0; i < s.length; i++ {
-		v := make(Value, s.size, s.size)
-		for j := 0; j < s.size; j++ {
-			v[j] = s.nr.Next()
+func Source(dim, len int, nr NumberReader) *SourceProc {
+	data := make([]Value, len, len)
+	for i := range data {
+		vec := make(Value, dim, dim)
+		data[i] = vec
+		for j := range vec {
+			vec[j] = nr.Next()
 		}
-		SendValue(v, out)
 	}
-	return nil
+	return &SourceProc{
+		nr:   nr,
+		dim:  dim,
+		data: data,
+	}
+}
+
+func (s *SourceProc) SetInputs(in ...Processer) {}
+func (s *SourceProc) Reset()                    {}
+
+// Get implements the dsp.Processer interface.
+func (s *SourceProc) Get(idx uint32) (Value, error) {
+	if int(idx) > len(s.data)-1 {
+		return nil, ErrOOB
+	}
+	return s.data[idx], nil
+}
+
+// Slice of floats.
+type Slice struct {
+	data []float64
+	idx  int
+}
+
+// NewSlice returns new Slice.
+func NewSlice(s []float64) *Slice {
+
+	return &Slice{data: s}
+}
+
+func (s *Slice) Next() float64 {
+	v := s.data[s.idx]
+	s.idx++
+	return v
+}
+
+// Counter returns 0,1,2,...
+type Counter struct {
+	count int
+}
+
+// NewCounter returns new counter.
+func NewCounter() *Counter {
+
+	return &Counter{}
+}
+
+// Next float value.
+func (c *Counter) Next() float64 {
+	v := float64(c.count)
+	c.count++
+	return v
 }
 
 // Random returns pseudo-random numbers between 0 an 1
