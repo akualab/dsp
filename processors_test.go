@@ -34,14 +34,14 @@ func TestAddScaled(t *testing.T) {
 		t.Log(v1, v2)
 
 		exp := []float64{}
-		for i, _ := range v1 {
-			exp = append(exp, (v1[i]+v2[i])*0.5)
+		for i, _ := range v1.Data {
+			exp = append(exp, (v1.Data[i]+v2.Data[i])*0.5)
 		}
 		v, e := out.Get(i)
 		if e != nil {
 			t.Fatal(e)
 		}
-		CompareSliceFloat(t, exp, v, "mismatch", 0.001)
+		CompareSliceFloat(t, exp, v.Data, "mismatch", 0.001)
 		t.Log(v)
 	}
 }
@@ -66,11 +66,11 @@ func TestJoin(t *testing.T) {
 				t.Fatal(e)
 			}
 			for j := 0; j < dim; j++ {
-				if v[j] != v[j+dim] {
-					t.Fatalf("mismatch j:%d, v1:%f, v2%f", j, v[j], v[j+dim])
+				if v.Data[j] != v.Data[j+dim] {
+					t.Fatalf("mismatch j:%d, v1:%f, v2%f", j, v.Data[j], v.Data[j+dim])
 				}
-				if v[j] != float64(int(i)*dim+j) {
-					t.Fatalf("mismatch j:%d, v1:%f, v2%f", j, v[j], float64(int(i)*dim+j))
+				if v.Data[j] != float64(int(i)*dim+j) {
+					t.Fatalf("mismatch j:%d, v1:%f, v2%f", j, v.Data[j], float64(int(i)*dim+j))
 				}
 			}
 		}
@@ -99,7 +99,7 @@ func TestMovingAverage(t *testing.T) {
 			t.Fatal(e)
 		}
 		t.Log(i, v)
-		if v[0] != expected[i] {
+		if v.Data[0] != expected[i] {
 			t.Fatalf("expected %f, got %f", expected[i], v)
 		}
 	}
@@ -137,7 +137,7 @@ func TestDiff(t *testing.T) {
 			t.Fatal(e)
 		}
 		t.Log(i, v)
-		if v[0] != expected[i] {
+		if v.Data[0] != expected[i] {
 			t.Fatalf("expected %f, got %f", expected[i], v)
 		}
 	}

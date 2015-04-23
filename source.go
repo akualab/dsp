@@ -5,7 +5,11 @@
 
 package dsp
 
-import "math/rand"
+import (
+	"math/rand"
+
+	narray "github.com/akualab/narray/na64"
+)
 
 // NumberReader - number generators must implement this interface.
 type NumberReader interface {
@@ -16,16 +20,16 @@ type NumberReader interface {
 type SourceProc struct {
 	nr   NumberReader
 	dim  int
-	data []Value
+	data [][]float64
 }
 
 // Source returns a data generator processor.
 // Uses a Random number generator with values between
 // 0 and 1 by default.
 func Source(dim, len int, nr NumberReader) *SourceProc {
-	data := make([]Value, len, len)
+	data := make([][]float64, len, len)
 	for i := range data {
-		vec := make(Value, dim, dim)
+		vec := make([]float64, dim, dim)
 		data[i] = vec
 		for j := range vec {
 			vec[j] = nr.Next()
@@ -46,7 +50,7 @@ func (s *SourceProc) Get(idx uint32) (Value, error) {
 	if int(idx) > len(s.data)-1 {
 		return nil, ErrOOB
 	}
-	return s.data[idx], nil
+	return narray.NewArray(s.data[idx], s.dim), nil
 }
 
 // Slice of floats.

@@ -1,9 +1,13 @@
 package dsp
 
-import "testing"
+import (
+	"testing"
+
+	narray "github.com/akualab/narray/na64"
+)
 
 func numbers(idx uint32, in ...Processer) (Value, error) {
-	return Value{float64(idx)}, nil
+	return narray.NewArray([]float64{float64(idx)}, 1), nil
 }
 
 func square(idx uint32, in ...Processer) (Value, error) {
@@ -11,7 +15,8 @@ func square(idx uint32, in ...Processer) (Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Value{v[0] * v[0]}, nil
+	x := []float64{v.Data[0] * v.Data[0]}
+	return narray.NewArray(x, 1), nil
 }
 
 func TestGraph(t *testing.T) {

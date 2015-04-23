@@ -9,25 +9,28 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gonum/floats"
+	narray "github.com/akualab/narray/na64"
 )
 
 const defaultBufSize = 100
+
+// Value is an multidimensional array that satisfies the framer interface.
+type Value *narray.NArray
 
 // AddScaled adds frames from all inputs and scales the added values.
 // Will panic if input frame sizes don't match.
 func AddScaled(size int, alpha float64) Processer {
 	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 		numInputs := len(in)
-		v := make(Value, size, size)
+		v := narray.New(size)
 		for i := 0; i < numInputs; i++ {
 			vec, err := in[i].Get(idx)
 			if err != nil {
 				return nil, err
 			}
-			floats.Add(v, vec)
+			narray.Add(v, v, vec)
 		}
-		floats.Scale(alpha, v)
+		narray.Scale(v, v, alpha)
 		return v, nil
 	})
 }
@@ -47,11 +50,7 @@ func Sub() Processer {
 		if e1 != nil {
 			return nil, e1
 		}
-		dim := len(vec0)
-		v := make(Value, dim, dim)
-		copy(v, vec0)
-		floats.Sub(v, vec1)
-		return v, nil
+		return narray.Sub(nil, vec0, vec1), nil
 	})
 }
 
@@ -60,15 +59,16 @@ func Sub() Processer {
 func Join() Processer {
 	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 		numInputs := len(in)
-		v := Value{}
+		v := []float64{}
 		for i := 0; i < numInputs; i++ {
 			vec, err := in[i].Get(idx)
 			if err != nil {
 				return nil, err
 			}
-			v = append(v, vec...)
+			v = append(v, vec.Data...)
 		}
-		return v, nil
+		na := narray.NewArray(v, len(v))
+		return na, nil
 	})
 }
 
@@ -80,15 +80,15 @@ func SpectralEnergy(logSize uint) Processer {
 	fs := 1 << logSize // output frame size
 	dftSize := 2 * fs
 	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
-		dft := make(Value, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
+		dft := make([]float64, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
 		vec, err := in[0].Get(idx)
 		if err != nil {
 			return nil, err
 		}
-		copy(dft, vec) // zero padded
+		copy(dft, vec.Data) // zero padded
 		RealFT(dft, dftSize, true)
 		egy := DFTEnergy(dft)
-		return egy, nil
+		return narray.NewArray(egy, len(egy)), nil
 	})
 }
 
@@ -122,17 +122,17 @@ var (
 func Filterbank(indices []int, coeff [][]float64) Processer {
 	nf := len(indices) // num filterbanks
 	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
-		fb := make(Value, nf, nf)
+		fb := make([]float64, nf, nf)
 		for i := 0; i < nf; i++ {
 			for k := 0; k < len(coeff[i]); k++ {
 				vec, err := in[0].Get(idx)
 				if err != nil {
 					return nil, err
 				}
-				fb[i] += coeff[i][k] * vec[indices[i]+k]
+				fb[i] += coeff[i][k] * vec.Data[indices[i]+k]
 			}
 		}
-		return fb, nil
+		return narray.NewArray(fb, len(fb)), nil
 	})
 }
 
@@ -143,12 +143,7 @@ func Log() Processer {
 		if err != nil {
 			return nil, err
 		}
-		size := len(vec)
-		v := make(Value, size, size)
-		for k, w := range vec {
-			v[k] = math.Log(w)
-		}
-		return v, nil
+		return narray.Log(nil, vec), nil
 	})
 }
 
@@ -159,7 +154,10 @@ func Sum() Processer {
 		if err != nil {
 			return nil, err
 		}
-		return Value{floats.Sum(vec)}, nil
+		sum := narray.New(1)
+		v := (*narray.NArray)(vec)
+		sum.Set(v.Sum(), 0)
+		return sum, nil
 	})
 }
 
@@ -184,10 +182,12 @@ func MaxNorm(bufSize int, alpha float64) Processer {
 			if err != nil {
 				return nil, err
 			}
-			norm = math.Sqrt(floats.Dot(vec, vec))
+			norm = math.Sqrt(narray.Dot(vec, vec))
 			max = math.Max(y, norm)
 		}
-		return Value{max}, nil
+		res := narray.New(1)
+		res.Set(max, 0)
+		return res, nil
 	})
 }
 
@@ -201,17 +201,17 @@ func DCT(inSize, outSize int) Processer {
 		if err != nil {
 			return nil, err
 		}
-		size := len(input)
+		size := input.Shape[0]
 		if inSize != size {
 			return nil, fmt.Errorf("mismatch in size [%d] and input frame size [%d]", inSize, size)
 		}
-		v := make(Value, outSize, outSize)
+		v := make([]float64, outSize, outSize)
 		for i := 1; i <= outSize; i++ {
 			for j := 0; j < inSize; j++ {
-				v[i-1] += input[j] * dct[i][j]
+				v[i-1] += input.Data[j] * dct[i][j]
 			}
 		}
-		return v, nil
+		return narray.NewArray(v, len(v)), nil
 	})
 }
 
@@ -264,16 +264,16 @@ func (ma *MAProc) Get(idx uint32) (Value, error) {
 		c = 1.0 / float64(idx+1)
 		start = 0
 	}
-	sum := make([]float64, ma.dim, ma.dim)
+	sum := narray.New(ma.dim)
 	// TODO: no need to add every time, use a circular buffer.
 	for j := start; j <= idx; j++ {
 		v, e := ma.Input(0).Get(j)
 		if e != nil {
 			return nil, e
 		}
-		floats.Add(sum, v)
+		narray.Add(sum, sum, v)
 	}
-	floats.Scale(c, sum)
+	narray.Scale(sum, sum, c)
 	ma.SetCache(idx, sum)
 	return sum, nil
 }
@@ -324,8 +324,7 @@ func (dp *DiffProc) Get(idx uint32) (Value, error) {
 	if ok {
 		return val, nil
 	}
-
-	sum := make([]float64, dp.dim, dp.dim)
+	sum := narray.New(dp.dim)
 	var j uint32
 	for ; j < uint32(dp.delta); j++ {
 		plus, ep := dp.Input(0).Get(idx + j + 1)
@@ -342,8 +341,8 @@ func (dp *DiffProc) Get(idx uint32) (Value, error) {
 		if em != nil {
 			return nil, em
 		}
-		floats.AddScaled(sum, dp.coeff[j], plus)
-		floats.AddScaled(sum, -dp.coeff[j], minus)
+		narray.AddScaled(sum, plus, dp.coeff[j])
+		narray.AddScaled(sum, minus, -dp.coeff[j])
 	}
 
 	dp.SetCache(idx, sum)

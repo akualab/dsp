@@ -1,3 +1,8 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package dsp
 
 import (
@@ -12,8 +17,12 @@ var ErrNoFunc = errors.New("no ProcFunc set")
 // Returned when frame index is out of bounds. Can be used as a termination flag.
 var ErrOOB = errors.New("frame index out of bounds")
 
-// Value is the type used to exchange values between processors.
-type Value []float64
+// Framer is the type used to exchange values between processors.
+type Framer interface {
+	// Create a copy of a frame. This is important because frames should never
+	// be modified in place.
+	Copy() Value
+}
 
 // The Processer interface must be implemented by all processors.
 type Processer interface {
@@ -176,13 +185,4 @@ func (app *App) String() string {
 		buf.WriteString("\n")
 	}
 	return buf.String()
-}
-
-// Copy creates a copy of the value.
-// Input values should be treated as read-only because
-// they may be shared with other processors.
-func (v Value) Copy() Value {
-	vcopy := make(Value, len(v), len(v))
-	copy(vcopy, v)
-	return vcopy
 }

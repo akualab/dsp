@@ -8,6 +8,8 @@ package dsp
 import (
 	"fmt"
 	"math"
+
+	narray "github.com/akualab/narray/na64"
 )
 
 const (
@@ -72,17 +74,18 @@ func (win *WindowProc) Get(idx uint32) (Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	inSize := len(vec)
+	//	inSize := len(vec)
+	inSize := vec.Shape[0]
 	if win.WinSize > inSize {
 		return nil, fmt.Errorf("window size [%d] is larger than input vector size [%d]", win.WinSize, inSize)
 	}
-	v := make(Value, win.WinSize, win.WinSize)
+	v := narray.New(win.WinSize)
 	if win.WindowType == Rectangular {
-		copy(v, vec)
+		copy(v.Data, vec.Data)
 	} else {
 		// Multiply by data in slice.
 		for i, _ := range win.data {
-			v[i] = vec[i] * win.data[i]
+			v.Data[i] = vec.Data[i] * win.data[i]
 		}
 	}
 	return v, nil

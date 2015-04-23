@@ -11,6 +11,7 @@ import (
 
 	"github.com/akualab/dsp"
 	"github.com/akualab/ju"
+	narray "github.com/akualab/narray/na64"
 )
 
 // Done is returned as the error value when there are no more waveforms available in the stream.
@@ -120,7 +121,8 @@ func (w *Waveform) Frame(idx int) (dsp.Value, error) {
 	if end < 1 || end >= n {
 		return nil, dsp.ErrOOB
 	}
-	return dsp.Value(w.Samples[start:end]), nil
+	res := narray.NewArray(w.Samples[start:end], w.frameSize)
+	return res, nil
 }
 
 // Reset implements the dsp.Resetter interface.
