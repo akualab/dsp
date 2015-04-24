@@ -22,7 +22,7 @@ func main() {
 
 	app := dsp.NewApp("Test Chain")
 
-	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep)
+	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep, false)
 	if err != nil {
 		log.Fatal(err)
 	}

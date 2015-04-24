@@ -34,7 +34,7 @@ func main() {
 
 	app := dsp.NewApp("Speech Recognizer Front-End")
 
-	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep)
+	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep, false)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func main() {
 			continue
 		}
 		app.Reset()
-		log.Printf("processing waveform [%s] with %d frames", id, numFrames)
+		log.Printf("processing waveform [%s] with %d frames, mean: %6.2f, sd: %6.2f", id, numFrames, wavSource.Mean(), wavSource.SD())
 		var i uint32
 		for ; ; i++ {
 			v, e := out.Get(i)

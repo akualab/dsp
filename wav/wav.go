@@ -18,40 +18,45 @@ import (
 var Done = errors.New("no more json objects")
 
 // A Waveform format for reading json files.
+//go:generate optioner -type Waveform
 type Waveform struct {
 	// ID is a waveform identifier.
-	ID string `json:"id"`
+	ID string `json:"id" opt:"-"`
 	// Samples are the digital samples read as a float64.
-	Samples []float64 `samples:"id"`
+	Samples []float64 `samples:"id" opt:"-"`
 	// FS is the sampling frequency in Hertz.
 	FS float64 `json:"fs,omitempty"`
 
 	frameSize int
 	stepSize  int
-	idx       int
+	idx       int     `opt:"-"`
+	sumx      float64 `opt:"-"`
+	sumxsq    float64 `opt:"-"`
 }
 
 // New returns a waveform object.
 // The waveform is partitioned into frames that may overlap with each other.
-// The length of each frame is the frameSize.
-// The distance between succesive frames is the stepSize.
-// If the frameSize equals the stepSize, the waveform is partitioned using disjoint segments.
-func New(id string, samples []float64, fs float64, frameSize, stepSize int) (Waveform, error) {
+// The length of each frame is set with option FrameSize().
+// The distance between succesive frames is set with option StepSize.
+// To get a single frame form the entire waveform use FrameSize(0) which is the default.
+// If FrameSize equals the StepSize, the waveform is partitioned using disjoint segments.
+// To specifiy a sampling rate, use option FS(). (In the future the package will convert the sampling rate.)
+func New(id string, samples []float64, options ...optWaveform) Waveform {
 
-	if stepSize < 1 {
-		return Waveform{}, fmt.Errorf("step size is %d, must be greater than zero", stepSize)
-	}
-	if frameSize < 1 {
-		return Waveform{}, fmt.Errorf("frame size is %d, must be greater than zero", frameSize)
-	}
 	w := Waveform{
-		ID:        id,
-		Samples:   samples,
-		FS:        fs,
-		frameSize: frameSize,
-		stepSize:  stepSize,
+		ID:      id,
+		Samples: samples,
 	}
-	return w, nil
+
+	// Set options.
+	w.Option(options...)
+
+	if w.frameSize < 1 {
+		w.frameSize = len(samples)
+		w.stepSize = len(samples)
+	}
+	w.stats()
+	return w
 }
 
 // Iter is an iterator to access waveforms sequentially.
@@ -63,6 +68,7 @@ type Iter struct {
 }
 
 // NewIterator creates an iterator to access all waveforms in path.
+// Also see New() for more details.
 // To specify path see ju.JSONStreamer.
 // It is the caller's responsibility to call Close to release the underlying readers.
 func NewIterator(path string, fs float64, frameSize, stepSize int) (Iter, error) {
@@ -87,12 +93,10 @@ func (iter Iter) Next() (Waveform, error) {
 	if e == ju.Done {
 		return w, Done
 	}
-	if w.FS != iter.fs {
+	if w.FS > 0 && iter.fs > 0 && (w.FS != iter.fs) {
 		fmt.Errorf("sampling rates don't match - wav fs is [%f], expected [%f] - TODO: implement sampling rate conversion", w.FS, iter.fs)
 	}
-	w.frameSize = iter.frameSize
-	w.stepSize = iter.stepSize
-	return w, e
+	return New(w.ID, w.Samples, FrameSize(iter.frameSize), StepSize(iter.stepSize)), nil
 }
 
 // Close underlying readers.
@@ -146,11 +150,14 @@ func (w *Waveform) NextFrame(idx int) (dsp.Value, error) {
 type SourceProc struct {
 	iter Iter
 	wav  Waveform
+	zm   bool
 	*dsp.Proc
 }
 
 // NewSourceProc create a new source of waveforms.
-func NewSourceProc(path string, fs float64, frameSize, stepSize int) (*SourceProc, error) {
+// See also New() for more details.
+// If zeroMean is true, the mean of the waveform samples is subtracetd from every sample.
+func NewSourceProc(path string, fs float64, frameSize, stepSize int, zeroMean bool) (*SourceProc, error) {
 
 	iter, err := NewIterator(path, fs, frameSize, stepSize)
 	if err != nil {
@@ -159,6 +166,7 @@ func NewSourceProc(path string, fs float64, frameSize, stepSize int) (*SourcePro
 	return &SourceProc{
 		iter: iter,
 		Proc: dsp.NewProc(100, nil),
+		zm:   zeroMean,
 	}, nil
 }
 
@@ -175,6 +183,11 @@ func (src *SourceProc) Next() error {
 	}
 	if err != nil {
 		return err
+	}
+	if src.zm {
+		for i := range src.wav.Samples {
+			src.wav.Samples[i] -= src.wav.Mean()
+		}
 	}
 	return nil
 }
@@ -196,4 +209,14 @@ func (src *SourceProc) ID() string {
 // NumFrames returns the number of frames in the current waveform.
 func (src *SourceProc) NumFrames() int {
 	return src.wav.NumFrames()
+}
+
+// Mean returns the mean of the waveform samples.
+func (src *SourceProc) Mean() float64 {
+	return src.wav.Mean()
+}
+
+// SD returns the standard deviation of the waveform samples.
+func (src *SourceProc) SD() float64 {
+	return src.wav.SD()
 }
