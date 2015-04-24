@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/akualab/dsp"
+	"github.com/akualab/dsp/wav"
 )
 
 /* Configuration parameters. */
 const (
+	bufSize        = 100
 	windowSize     = 205
 	windowStep     = 80
 	logFFTSize     = 8
@@ -18,6 +19,8 @@ const (
 	cepstrumSize   = 8
 	maxNormAlpha   = 0.99
 	cepMeanWin     = 100
+	fs             = 8000
+	path           = "../../data"
 )
 
 var deltaCoeff = []float64{0.7, 0.2, 0.1}
@@ -29,103 +32,95 @@ var deltaCoeff = []float64{0.7, 0.2, 0.1}
 // I leave it as an exercise for the reader :-)
 func main() {
 
-	app := dsp.NewApp("Speech Recognizer Front-End", 1000)
+	app := dsp.NewApp("Speech Recognizer Front-End")
 
-	r, err := os.Open("data/audio-rec-8k.txt")
+	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	c := &dsp.ReaderConfig{
-		FrameSize: windowSize,
-		StepSize:  windowStep,
-		ValueType: dsp.Text,
-	}
+	app.Add("waveform", wavSource)
+	app.Add("windowed", dsp.Window(windowSize).Use(dsp.Hamming))
+	app.Add("spectrum", dsp.SpectralEnergy(logFFTSize))
+	app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients))
+	app.Add("log filterbank", dsp.Log())
+	app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize))
+	app.Add("mean cepstrum", dsp.NewMAProc(cepstrumSize, cepMeanWin, bufSize))
+	app.Add("zero mean cepstrum", dsp.Sub())
 
-	// Use builder to create the application graph.
-	b := app.NewBuilder()
-	fmt.Println(b)
+	app.Connect("windowed", "waveform")
+	app.Connect("spectrum", "windowed")
+	app.Connect("filterbank", "spectrum")
+	app.Connect("log filterbank", "filterbank")
+	app.Connect("cepstrum", "log filterbank")
+	app.Connect("mean cepstrum", "cepstrum")
 
-	// Turns off writer output.
-	print := false
-
-	b.Add("waveform", dsp.Reader(r, c))
-	b.Add("windowed", dsp.Window(windowSize).Use(dsp.Hamming))
-	b.Add("spectrum", dsp.SpectralEnergy(logFFTSize))
-	b.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients))
-	b.Add("log filterbank", dsp.Log())
-	b.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize))
-	b.Add("writer", dsp.WriteValues(os.Stdout, print))
-	b.Add("mean cepstrum", dsp.MovingAverage(cepstrumSize, cepMeanWin, nil))
-	b.Add("zero mean cepstrum", dsp.Sub())
-
-	b.Connect("waveform", "windowed")
-	b.Connect("windowed", "spectrum")
-	b.Connect("spectrum", "filterbank")
-	b.Connect("filterbank", "log filterbank")
-	b.Connect("log filterbank", "cepstrum")
-	b.Connect("cepstrum", "writer")
-	b.Connect("cepstrum", "mean cepstrum")
-
-	// Subtract approx. cepstrum mean from cepstrum.
-	b.ConnectOrdered("cepstrum", "zero mean cepstrum", 0)
-	b.ConnectOrdered("mean cepstrum", "zero mean cepstrum", 1)
+	// mean cep uses two inputs
+	app.Connect("zero mean cepstrum", "cepstrum", "mean cepstrum")
 
 	// Energy features.
-	b.Add("cepstral energy", dsp.Sum())
-	b.Add("max cepstral energy", dsp.MaxNorm(maxNormAlpha))
-	b.Connect("log filterbank", "cepstral energy")
-	b.Connect("cepstral energy", "max cepstral energy")
+	app.Add("cepstral energy", dsp.Sum())
+	app.Add("max cepstral energy", dsp.MaxNorm(bufSize, maxNormAlpha))
+	app.Connect("cepstral energy", "log filterbank")
+	app.Connect("max cepstral energy", "cepstral energy")
 
 	// Subtract approx. max energy from energy.
-	b.Add("normalized cepstral energy", dsp.Sub())
-	b.ConnectOrdered("cepstral energy", "normalized cepstral energy", 0)
-	b.ConnectOrdered("max cepstral energy", "normalized cepstral energy", 1)
+	app.Add("normalized cepstral energy", dsp.Sub())
+	app.Connect("normalized cepstral energy", "cepstral energy", "max cepstral energy")
 
 	// Delta cepstrum features.
-	b.Add("delta cepstrum", dsp.NewDiffProc(cepstrumSize, deltaCoeff))
-	b.Add("delta delta cepstrum", dsp.NewDiffProc(cepstrumSize, deltaCoeff))
-	b.Connect("zero mean cepstrum", "delta cepstrum")
-	b.Connect("delta cepstrum", "delta delta cepstrum")
+	app.Add("delta cepstrum", dsp.NewDiffProc(cepstrumSize, bufSize, deltaCoeff))
+	app.Add("delta delta cepstrum", dsp.NewDiffProc(cepstrumSize, bufSize, deltaCoeff))
+	app.Connect("delta cepstrum", "zero mean cepstrum")
+	app.Connect("delta delta cepstrum", "delta cepstrum")
 
 	// Delta energy features.
-	b.Add("delta energy", dsp.NewDiffProc(1, deltaCoeff))
-	b.Add("delta delta energy", dsp.NewDiffProc(1, deltaCoeff))
-	b.Connect("normalized cepstral energy", "delta energy")
-	b.Connect("delta energy", "delta delta energy")
+	app.Add("delta energy", dsp.NewDiffProc(1, bufSize, deltaCoeff))
+	app.Add("delta delta energy", dsp.NewDiffProc(1, bufSize, deltaCoeff))
+	app.Connect("delta energy", "normalized cepstral energy")
+	app.Connect("delta delta energy", "delta energy")
 
 	// Put three cepstrum features and three energy features in a single vector.
-	b.Add("combined", dsp.Join())
-	b.Tap("combined")
-	b.ConnectOrdered("normalized cepstral energy", "combined", 0)
-	b.ConnectOrdered("delta energy", "combined", 1)
-	b.ConnectOrdered("delta delta energy", "combined", 2)
-	b.ConnectOrdered("zero mean cepstrum", "combined", 3)
-	b.ConnectOrdered("delta cepstrum", "combined", 4)
-	b.ConnectOrdered("delta delta cepstrum", "combined", 5)
+	app.Add("combined", dsp.Join())
+	out := app.NewTap("combined")
 
-	// Run the app. Here is where the channels are created and assigned to processors.
-	b.Run()
+	app.Connect("combined",
+		"normalized cepstral energy",
+		"delta energy",
+		"delta delta energy",
+		"zero mean cepstrum",
+		"delta cepstrum",
+		"delta delta cepstrum")
 
-	// Get the output channels.
-	// Must be done after calling Run()
-	combChan := b.TapChan("combined")
-
-	// Get vectors.
-	i := 0
-	for v := range combChan {
-		fmt.Printf("f=%5d, len=%d, v=%v\n", i, len(v), vecSprint(v))
-		fmt.Println(b)
-		i++
-	}
-
-	if app.Error() != nil {
-		log.Fatalf("error: %s", app.Error())
-	}
-
-	err = r.Close()
-	if err != nil {
-		panic(err)
+	for {
+		// load next wav
+		err := wavSource.Next()
+		if err == wav.Done {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		numFrames := wavSource.NumFrames()
+		id := wavSource.ID()
+		if numFrames == 0 {
+			log.Printf("waveform %s is too short, skipping", id)
+			continue
+		}
+		app.Reset()
+		log.Printf("processing waveform [%s] with %d frames", id, numFrames)
+		var i uint32
+		for ; ; i++ {
+			v, e := out.Get(i)
+			if e == dsp.ErrOOB {
+				log.Printf("done processing %d frames for waveform [%s]", i, id)
+				break
+			}
+			if e != nil {
+				log.Fatal(e)
+			}
+			log.Printf("feature: cepstrum, frame: %d, data: %v", i, v.Data)
+		}
 	}
 }
 

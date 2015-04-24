@@ -111,7 +111,6 @@ func (w *Waveform) NumFrames() int {
 // Frame returns a frame of samples for the given index. NOTE: the slice may be shared with
 // other processors or may be cached. For these reason, the caller should not modify the slice in-place.
 func (w *Waveform) Frame(idx int) (dsp.Value, error) {
-
 	n := len(w.Samples)
 	start := idx * w.stepSize
 	end := start + w.frameSize
@@ -141,4 +140,60 @@ func (w *Waveform) NextFrame(idx int) (dsp.Value, error) {
 	}
 	w.idx++
 	return frame, e
+}
+
+// SourceProc is a source processor that provides access to waveform data.
+type SourceProc struct {
+	iter Iter
+	wav  Waveform
+	*dsp.Proc
+}
+
+// NewSourceProc create a new source of waveforms.
+func NewSourceProc(path string, fs float64, frameSize, stepSize int) (*SourceProc, error) {
+
+	iter, err := NewIterator(path, fs, frameSize, stepSize)
+	if err != nil {
+		return nil, err
+	}
+	return &SourceProc{
+		iter: iter,
+		Proc: dsp.NewProc(100, nil),
+	}, nil
+}
+
+// Next loads the next available waveform into the source. Returns Done when all waveforms have been processed.
+func (src *SourceProc) Next() error {
+	var err error
+	src.wav, err = src.iter.Next()
+	if err == Done {
+		e := src.iter.Close()
+		if e != nil {
+			return e
+		}
+		return Done
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Get implements the dsp.Processer interface.
+func (src *SourceProc) Get(idx uint32) (dsp.Value, error) {
+	frame, err := src.wav.Frame(int(idx))
+	if err != nil {
+		return nil, err
+	}
+	return frame, nil
+}
+
+// ID returns the id of the current waveform.
+func (src *SourceProc) ID() string {
+	return src.wav.ID
+}
+
+// NumFrames returns the number of frames in the current waveform.
+func (src *SourceProc) NumFrames() int {
+	return src.wav.NumFrames()
 }

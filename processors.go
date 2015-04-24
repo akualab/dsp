@@ -40,7 +40,7 @@ func AddScaled(size int, alpha float64) Processer {
 func Sub() Processer {
 	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
 		if len(in) != 2 {
-			return nil, fmt.Errorf("proc has %d inputs, expected 2", len(in))
+			return nil, fmt.Errorf("proc Sub needs 2 inputs got %d", len(in))
 		}
 		vec0, e0 := in[0].Get(idx)
 		if e0 != nil {
