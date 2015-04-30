@@ -61,3 +61,17 @@ func TestDFTEnergy(t *testing.T) {
 	CompareSliceFloat(t, expected, energy, "no match", 0.05)
 
 }
+
+func TestGenerateFilterbank(t *testing.T) {
+
+	indices, coeff := GenerateFilterbank(32, 6)
+
+	t.Log(indices)
+	t.Log(coeff)
+
+	indices, coeff = GenerateFilterbank(1024, 10, 150, 1, 45)
+
+	t.Log(indices)
+	t.Log(coeff)
+
+}

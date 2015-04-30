@@ -75,7 +75,6 @@ func Join() Processer {
 // SpectralEnergy computes the real FFT energy of the input frame.
 // See dsp.RealFT and dsp.DFTEnergy for details.
 // The size of the output vector is 2^logSize.
-// The real fft size computed is 2 * frame_size.
 func SpectralEnergy(logSize uint) Processer {
 	fs := 1 << logSize // output frame size
 	dftSize := 2 * fs
@@ -122,13 +121,13 @@ var (
 func Filterbank(indices []int, coeff [][]float64) Processer {
 	nf := len(indices) // num filterbanks
 	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		vec, err := in[0].Get(idx)
+		if err != nil {
+			return nil, err
+		}
 		fb := make([]float64, nf, nf)
 		for i := 0; i < nf; i++ {
 			for k := 0; k < len(coeff[i]); k++ {
-				vec, err := in[0].Get(idx)
-				if err != nil {
-					return nil, err
-				}
 				fb[i] += coeff[i][k] * vec.Data[indices[i]+k]
 			}
 		}
@@ -347,4 +346,120 @@ func (dp *DiffProc) Get(idx uint32) (Value, error) {
 
 	dp.SetCache(idx, sum)
 	return sum, nil
+}
+
+// MaxXCorrIndex returns the lag that maximizes the cross-correlation between two inputs.
+// The input vectors are in0[0] and in1[0]. The param lagLimit is the highest lag value to be explored.
+// Input vectors may have different lengths.
+//  xcor[i] = x[n] * y[n-i]
+// Returns the value of i that maximizes xcorr[i] and the max correlation value in a two-dimensional vector.
+// value[0]=lag, value[1]=xcorr
+func MaxXCorrIndex(lagLimit int) Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		if len(in) != 2 {
+			return nil, fmt.Errorf("proc Corr needs 2 inputs got %d", len(in))
+		}
+		vec0, e0 := in[0].Get(0)
+		if e0 != nil {
+			return nil, e0
+		}
+		vec1, e1 := in[1].Get(0)
+		if e1 != nil {
+			return nil, e1
+		}
+		maxLag := 0
+		maxCorr := 0.0
+		n0 := len(vec0.Data)
+		n1 := len(vec1.Data)
+		for lag := 0; lag < lagLimit; lag++ {
+			end := n0
+			if n1+lag < end {
+				end = len(vec1.Data) + lag
+			}
+			if lag > end {
+				break
+			}
+			sum := 0.0
+			for i := lag; i < end; i++ {
+				sum += vec0.Data[i] * vec1.Data[i-lag]
+			}
+			if sum > maxCorr {
+				maxCorr = sum
+				maxLag = lag
+			}
+		}
+		return narray.NewArray([]float64{float64(maxLag), maxCorr}, 2), nil
+	})
+}
+
+// MaxWin returns the max value elementwise on a single input stream. Iterates over all the vectors
+// of the input stream.
+func MaxWin() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		var max *narray.NArray
+		var i uint32
+		for {
+			vec, err := in[0].Get(i)
+			if err == ErrOOB {
+				return max, nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			if i == 0 {
+				max = narray.New(vec.Shape[0])
+				max.SetValue(-math.MaxFloat64)
+			}
+			narray.MaxArray(max, vec, max)
+			i++
+		}
+	})
+}
+
+// Mean returns the mean vector elementwise on a single input stream. Iterates over all the vectors
+// of the input stream.
+//         N-1
+//  mean = sum in_frame[i] where mean and in_frame are vectors.
+//         i=0
+func Mean() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		var mean *narray.NArray
+		var i uint32
+		for {
+			vec, err := in[0].Get(i)
+			if err == ErrOOB {
+				return narray.Scale(mean, mean, 1/float64(i)), nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			if i == 0 {
+				mean = narray.New(vec.Shape[0])
+			}
+			narray.Add(mean, mean, vec)
+			i++
+		}
+	})
+}
+
+// MSE returns the mean squared error between two inputs.
+func MSE() Processer {
+	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+		if len(in) != 2 {
+			return nil, fmt.Errorf("proc MSE needs 2 inputs got %d", len(in))
+		}
+		vec0, e0 := in[0].Get(idx)
+		if e0 != nil {
+			return nil, e0
+		}
+		vec1, e1 := in[1].Get(idx)
+		if e1 != nil {
+			return nil, e1
+		}
+		n := float64(vec0.Shape[0])
+		mse := narray.Sub(nil, vec0, vec1)
+		narray.Mul(mse, mse, mse)
+		narray.Scale(mse, mse, 1.0/n)
+		return mse, nil
+	})
 }

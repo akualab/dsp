@@ -14,6 +14,7 @@ func TestJSONStreamer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log("XXX", iter)
 	i := 0
 	for ; ; i++ {
 		w, e := iter.Next()
@@ -24,7 +25,8 @@ func TestJSONStreamer(t *testing.T) {
 			t.Fatal(e)
 		}
 		ids = append(ids, w.ID)
-		nf := w.NumFrames()
+		nf := iter.NumFrames()
+		t.Log("XXX", iter, nf, w.ID)
 		t.Log(i, "wav:", w.ID, "num_frames:", nf)
 		if nf != len(w.Samples)/2 {
 			t.Fatalf("num frames mismatch - expected %d, got %d", len(w.Samples)/2, nf)
@@ -65,17 +67,17 @@ func TestBounds(t *testing.T) {
 			t.Fatal(e)
 		}
 		ids = append(ids, w.ID)
-		nf := w.NumFrames()
+		nf := iter.NumFrames()
 		t.Log(i, "wav:", w.ID, "num_frames:", nf)
 		if nf != len(w.Samples)/2 {
 			t.Fatalf("num frames mismatch - expected %d, got %d", len(w.Samples)/2, nf)
 		}
-		frame, err := w.Frame(11)
+		frame, err := iter.Frame(11)
 		if err != nil {
 			t.Fatal("expected frame 11, got error")
 		}
 		t.Log(frame)
-		frame, err = w.Frame(8000)
+		frame, err = iter.Frame(8000)
 		if err == nil {
 			t.Fatalf("expected error for frame 11, got %v", frame)
 		}

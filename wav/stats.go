@@ -18,14 +18,13 @@ func (w *Waveform) stats() {
 	w.sumxsq = sumxsq
 }
 
-// Mean returns the mean of the waveform samples.
+// Mean returns the mean of the waveform samples as they were read from the source.
 func (w *Waveform) Mean() float64 {
 	return w.sumx / float64(len(w.Samples))
 }
 
-// SD returns the standard deviation of the waveform samples.
+// SD returns the standard deviation of the waveform samples as they were read from the source.
 func (w *Waveform) SD() float64 {
-
 	n := float64(len(w.Samples))
 	mu := w.sumx / n
 	return math.Sqrt(w.sumxsq/n - mu*mu)

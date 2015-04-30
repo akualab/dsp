@@ -91,6 +91,27 @@ func (win *WindowProc) Get(idx uint32) (Value, error) {
 	return v, nil
 }
 
+// WindowSlice Returns a window as a slice of float64.
+func WindowSlice(winType, winSize int) ([]float64, error) {
+
+	switch winType {
+	case Rectangular:
+		s := make([]float64, winSize, winSize)
+		for i := range s {
+			s[i] = 1
+		}
+		return s, nil
+	case Hanning:
+		return HanningWindow(winSize), nil
+	case Hamming:
+		return HammingWindow(winSize), nil
+	case Blackman:
+		return BlackmanWindow(winSize), nil
+	default:
+		return nil, fmt.Errorf("Unknow window type: %d", winType)
+	}
+}
+
 // HanningWindow returns a Hanning window.
 // w(t) = 0.5  – 0.5 * cos(2 pi t / T)
 func HanningWindow(n int) []float64 {

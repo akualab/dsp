@@ -1,9 +1,12 @@
 package dsp
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 /*
-Generate the Discrete Cosine Transform.
+GenerateDCT generates the Discrete Cosine Transform.
 
      for i = 0,..,N-1
 
@@ -104,7 +107,7 @@ func four1(data []float64, nn int, direct bool) {
 }
 
 /*
-Compute DFT of a real discrete signal.
+RealFT compute the DFT of a real discrete signal.
 (Adapted fron Numerical Recipes Book)
 
 Input array is the sequence of real values.
@@ -184,7 +187,7 @@ func RealFT(data []float64, n int, direct bool) {
 }
 
 /*
-Compute DFT energy vector.
+DFTEnergy computes the DFT energy vector.
 The size of the energy array should be half of the input array.
 
      For the example in RealFT, the output would be:
@@ -192,11 +195,9 @@ The size of the energy array should be half of the input array.
      DFT Energy: 2.25 2.17 1.96 1.63 1.25 0.87 0.54 0.33
                  n=0  n=1  n=2  n=3  n=4  n=5  n=6  n=7
 
-dft is the discrete Fourier transform. (See RealfFT for format.)
-energy is the energy values for the DFT.
+param "dft" is the discrete Fourier transform. (See RealfFT for format.)
 */
 func DFTEnergy(dft []float64) []float64 {
-
 	size := len(dft) / 2
 	energy := make([]float64, size, size)
 
@@ -207,7 +208,7 @@ func DFTEnergy(dft []float64) []float64 {
 	return energy
 }
 
-// Returns modulo of two numbers.
+// Modulo returns modulo of two numbers.
 //  6 % 5 = 1
 // -3 % 5 = 2
 func Modulo(a, b int) int {
@@ -216,4 +217,90 @@ func Modulo(a, b int) int {
 		ret += b
 	}
 	return ret
+}
+
+/*
+GenerateFilterbank generates overlapping filters of triangular shape.
+For example for n=256 and nf=10:
+
+     0   1     9
+     /\ /\     /\
+    /  \  \      \
+   /  / \  \      \
+  +--+--+--+ ... --+
+  0                255
+
+The start of each filter is calculated as follows:
+
+  mid = n / (nf+1),  where mid is half filter width.
+  w = 2 * mid, where w is the width of the filter
+  start[i] = i * mid, where start is the start of the filter
+
+The filter coefficients are calculated as follows:
+
+  c[j] = j / mid, i={0,..mid}
+  c[2*mid-j] = c[j]
+
+Example for n = 32, nf = 6:
+
+  mid = 32/7 = 4
+  indices: [0 4 8 12 16 20]
+  coeff:   [0 0.25 0.5 0.75 1 0.75 0.5 0.25]
+
+To limit the frequency range of the filterbank, you may pass either zero or
+three frequency arguments as follows:
+
+  GenerateFilterbank(n, nf int, fs, minFreq, maxFreq)
+
+where:
+
+  fs: sampling frequency in Hz
+  minFreq is the minimum frequency of the filterbank
+  maxFreq is the maximum frequency of the filterbank
+
+If the frequency arguments are ommited the range will be 0-fs/2. The maxFreq must be less than fs/2.
+The filterbank will include only the frequencies in the range specified.
+*/
+func GenerateFilterbank(n, nf int, freq ...float64) ([]int, [][]float64) {
+
+	var nn, start int
+	end := n
+	if len(freq) == 0 {
+		nn = n
+	} else if len(freq) != 3 {
+		panic(fmt.Errorf("argument freq must have either zero or three values, got %d", len(freq)))
+	} else {
+		fn := freq[0] / 2
+		min := freq[1]
+		max := freq[2]
+		if min > max || max > fn || fn < 0 || min < 0 || max < 0 {
+			panic(fmt.Errorf("bad freq combination, got fs:%f, min:%f, max:%f", freq[0], min, max))
+		}
+		start = int(float64(n) * min / fn)
+		end = int(float64(n) * (fn - max) / fn)
+		nn = end - start
+	}
+	if nn < nf {
+		panic(fmt.Errorf("not enough DFT points to compute filterbank, you must adjust parameters, got start:%d, end:%d, nf:%d, num points:%d", start, end, nf, nn))
+	}
+	mid := nn / (nf + 1)
+	indices := make([]int, nf, nf)
+	filters := make([][]float64, nf, nf)
+
+	for i := range indices {
+		filters[i] = fbCoeff(mid)
+		indices[i] = (i * mid) + start
+	}
+	return indices, filters
+}
+
+func fbCoeff(mid int) []float64 {
+
+	w := 2 * mid
+	coeff := make([]float64, w, w)
+	for i := 1; i <= mid; i++ {
+		coeff[i] = float64(i) / float64(mid)
+		coeff[2*mid-i] = coeff[i]
+	}
+	return coeff
 }
