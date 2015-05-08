@@ -169,7 +169,7 @@ func (app *App) Connect(to string, from ...string) {
 	app.inputs[to] = from
 }
 
-// Reset resets all processors in preparation fro a new stream.
+// Reset resets all processors in preparation for a new stream.
 func (app *App) Reset() {
 	for _, p := range app.procs {
 		p.Reset()
