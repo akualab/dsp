@@ -26,13 +26,13 @@ type Framer interface {
 
 // The Processer interface must be implemented by all processors.
 type Processer interface {
-	Get(uint32) (Value, error)
+	Get(int) (Value, error)
 	SetInputs(...Processer)
 	Reset()
 }
 
 // ProcFunc is the type used to implement processing functions.
-type ProcFunc func(uint32, ...Processer) (Value, error)
+type ProcFunc func(int, ...Processer) (Value, error)
 
 // Proc can be embedded in objects that implement the Processer interface.
 type Proc struct {
@@ -60,7 +60,10 @@ func (bp *Proc) Reset() {
 }
 
 // Get - returns value for index.
-func (bp *Proc) Get(idx uint32) (Value, error) {
+func (bp *Proc) Get(idx int) (Value, error) {
+	if idx < 0 {
+		return nil, ErrOOB
+	}
 	val, ok := bp.cache.get(idx)
 	if ok {
 		return val, nil
@@ -77,12 +80,12 @@ func (bp *Proc) Get(idx uint32) (Value, error) {
 }
 
 // SetCache sets the value in the cache.
-func (bp *Proc) SetCache(idx uint32, val Value) {
+func (bp *Proc) SetCache(idx int, val Value) {
 	bp.cache.set(idx, val)
 }
 
 // GetCache gets value from cache.
-func (bp *Proc) GetCache(idx uint32) (Value, bool) {
+func (bp *Proc) GetCache(idx int) (Value, bool) {
 	val, ok := bp.cache.get(idx)
 	return val, ok
 }
@@ -105,8 +108,7 @@ func (bp *Proc) Input(n int) Processer {
 // App defines a DSP application.
 type App struct {
 	// App name.
-	Name string
-	// Default buffer size for connecting channels.
+	Name   string
 	procs  map[string]Processer
 	inputs map[string][]string
 }
@@ -140,8 +142,8 @@ func (app *App) NewTap(name string) Tap {
 	}
 }
 
-// Value returns the value for frame index.
-func (t Tap) Get(idx uint32) (Value, error) {
+// Get returns the value for frame index.
+func (t Tap) Get(idx int) (Value, error) {
 	return t.proc.Get(idx)
 }
 

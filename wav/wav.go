@@ -32,9 +32,9 @@ type Waveform struct {
 
 // New returns a waveform object.
 // To specifiy a sampling rate, use option fs. Use fs=0 to ignore checks. (In the future the package will convert the sampling rate.)
-func New(id string, samples []float64, fs float64) Waveform {
+func New(id string, samples []float64, fs float64) *Waveform {
 
-	w := Waveform{
+	w := &Waveform{
 		ID:      id,
 		Samples: samples,
 		FS:      fs,
@@ -50,7 +50,7 @@ type Iter struct {
 	frameSize, stepSize, winType int
 	winData                      []float64
 	fs                           float64
-	wav                          Waveform
+	wav                          *Waveform
 }
 
 // NewIterator creates an iterator to access all waveforms in path.
@@ -78,7 +78,7 @@ func NewIterator(path string, fs float64, frameSize, stepSize int) (*Iter, error
 
 // Next returns the next available waveform.
 // When there are no more waveforms, Done is returned as the error.
-func (iter *Iter) Next() (Waveform, error) {
+func (iter *Iter) Next() (*Waveform, error) {
 	return iter.NextSegment(0, -1)
 }
 
@@ -87,8 +87,8 @@ func (iter *Iter) Next() (Waveform, error) {
 // Param start is the index of the start sample. (Must be less than len(wav) and end.)
 // Param end is the max value of the index of the last sample to be included. (Must be less than len(wav).)
 // To set end to the size of the waveform use end=-1.
-func (iter *Iter) NextSegment(start, end int) (Waveform, error) {
-	var w Waveform
+func (iter *Iter) NextSegment(start, end int) (*Waveform, error) {
+	var w *Waveform
 	e := iter.js.Next(&w)
 	if e == ju.Done {
 		return w, Done
@@ -96,15 +96,15 @@ func (iter *Iter) NextSegment(start, end int) (Waveform, error) {
 	if w.FS > 0 && iter.fs > 0 && (w.FS != iter.fs) {
 		fmt.Errorf("sampling rates don't match - wav fs is [%f], expected [%f] - TODO: implement sampling rate conversion", w.FS, iter.fs)
 	}
+	iter.wav, e = getWav(w, start, end, iter.fs)
 	if iter.frameSize < 1 {
-		iter.frameSize = len(w.Samples)
+		iter.frameSize = len(iter.wav.Samples)
 		iter.stepSize = iter.frameSize
 	}
-	iter.wav, e = getWav(w, start, end, iter.fs)
 	return iter.wav, e
 }
 
-func getWav(w Waveform, start, end int, fs float64) (Waveform, error) {
+func getWav(w *Waveform, start, end int, fs float64) (*Waveform, error) {
 	if start >= len(w.Samples) {
 		fmt.Errorf("start must be less than length of wav, got start=%d, len(wav)=%d", start, len(w.Samples))
 	}
@@ -157,18 +157,19 @@ func (w *Waveform) Reset() {
 // SourceProc is a source processor that provides access to waveform data.
 //go:generate optioner -type SourceProc
 type SourceProc struct {
-	*dsp.Proc  `opt:"-"`
-	path       string
-	iter       *Iter    `opt:"-"`
-	wav        Waveform `opt:"-"`
-	zm         bool
-	winType    int
-	winData    []float64 `opt:"-"`
-	frameSize  int
-	stepSize   int
-	bufSize    int
-	fs         float64
-	start, end int
+	*dsp.Proc `opt:"-"`
+	path      string    `opt:"-"`
+	iter      *Iter     `opt:"-"`
+	wav       *Waveform `opt:"-"`
+	zm        bool
+	winType   int
+	winData   []float64 `opt:"-"`
+	frameSize int
+	stepSize  int
+	bufSize   int
+	fs        float64
+	start     int
+	end       int
 }
 
 // NewSourceProc create a new source of waveforms.
@@ -227,17 +228,16 @@ func (src *SourceProc) Rewind(start, end, frameSize, stepSize int, winType int) 
 	return nil
 }
 
-// Next loads the next available waveform into the source. Returns Done when all waveforms have been processed.
-//func (src *SourceProc) Next() error {
-//	return src.NextSegment(0, -1)
-//}
-
-// NextSegment loads a segment of the next available waveform into the source. Returns Done when all waveforms have been processed.
+// Next loads a segment of the next available waveform into the source. Returns Done when all waveforms have been processed.
 // See also Waveform.NextSegment() for details.
 //func (src *SourceProc) NextSegment(start, end int) error {
 func (src *SourceProc) Next() error {
 	var err error
-	//	src.wav, err = src.iter.NextSegment(start, end)
+
+	// Reset values.
+	src.iter.frameSize = src.frameSize
+	src.iter.stepSize = src.stepSize
+
 	src.wav, err = src.iter.Next()
 	if err == Done {
 		e := src.iter.Close()
@@ -258,14 +258,13 @@ func (src *SourceProc) Next() error {
 	// Undo rewind changes.
 	src.iter.winType = src.winType
 	src.iter.winData = src.winData
-
 	return nil
 }
 
 // Get implements the dsp.Processer interface.
 // If window option is used, window size must be less or equal than frameSize. If smaller, remaining samples are zero padded.
-func (src *SourceProc) Get(idx uint32) (dsp.Value, error) {
-	in, err := src.iter.Frame(int(idx))
+func (src *SourceProc) Get(idx int) (dsp.Value, error) {
+	in, err := src.iter.Frame(idx)
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +299,11 @@ func (src *SourceProc) ID() string {
 // NumFrames returns the number of frames in the current waveform.
 func (src *SourceProc) NumFrames() int {
 	return src.iter.NumFrames()
+}
+
+// NumSamples returns the number of samples in the current waveform.
+func (src *SourceProc) NumSamples() int {
+	return len(src.wav.Samples)
 }
 
 // Mean returns the mean of the waveform samples as they were read from the source.

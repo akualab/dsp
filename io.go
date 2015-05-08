@@ -29,7 +29,7 @@ const (
 // can be used like the "tee" command, which can often be useful
 // for debugging.
 func WriteValues(writer io.Writer, on bool) Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		v, err := in[0].Get(idx)
 		if err != nil {
 			return nil, err

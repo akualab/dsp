@@ -17,15 +17,6 @@ func (t *SourceProc) Option(options ...optSourceProc) (previous optSourceProc) {
 	return previous
 }
 
-// Path sets a value for instances of type SourceProc.
-func Path(o string) optSourceProc {
-	return func(t *SourceProc) optSourceProc {
-		previous := t.path
-		t.path = o
-		return Path(previous)
-	}
-}
-
 // Zm sets a value for instances of type SourceProc.
 func Zm(o bool) optSourceProc {
 	return func(t *SourceProc) optSourceProc {
@@ -86,5 +77,14 @@ func Start(o int) optSourceProc {
 		previous := t.start
 		t.start = o
 		return Start(previous)
+	}
+}
+
+// End sets a value for instances of type SourceProc.
+func End(o int) optSourceProc {
+	return func(t *SourceProc) optSourceProc {
+		previous := t.end
+		t.end = o
+		return End(previous)
 	}
 }

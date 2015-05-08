@@ -27,7 +27,7 @@ func TestAddScaled(t *testing.T) {
 	s1 := app.NewTap("s1")
 	s2 := app.NewTap("s2")
 	out := app.NewTap("p2")
-	var i uint32
+	var i int
 	for ; i < 10; i++ {
 		v1, _ := s1.Get(i)
 		v2, _ := s2.Get(i)
@@ -58,7 +58,7 @@ func TestJoin(t *testing.T) {
 	app.Connect("join", "s1", "s2")
 	out := app.NewTap("join")
 	for k := 0; k < 2; k++ {
-		var i uint32
+		var i int
 		for ; i < 20; i++ {
 			v, e := out.Get(i)
 			t.Log(v)
@@ -92,8 +92,8 @@ func TestMovingAverage(t *testing.T) {
 	out := app.NewTap("moving average")
 
 	app.Reset()
-	var i uint32
-	for ; i < uint32(len(input)); i++ {
+	var i int
+	for ; i < int(len(input)); i++ {
 		v, e := out.Get(i)
 		if e != nil {
 			t.Fatal(e)
@@ -111,7 +111,7 @@ func TestDiff(t *testing.T) {
 	input := []float64{1, 1, 7, 6, 5, 2, 2, 3, 4, 5, -1}
 
 	// expected output for winSize=4
-	expected := []float64{0, 0, 4, 1, -5, -3, -1, 3, -3, 0, 0}
+	expected := []float64{4, 4, 4, 1, -5, -3, -1, 3, -3}
 	coeff := []float64{0, 1}
 	app := NewApp("Test Diff")
 	app.Add("source", Source(1, len(input), NewSlice(input)))
@@ -121,12 +121,12 @@ func TestDiff(t *testing.T) {
 	out := app.NewTap("diff")
 
 	app.Reset()
-	var i uint32
-	for ; i < uint32(len(input)); i++ {
+	for i := 0; i < int(len(input)); i++ {
+		t.Log("i:", i)
 		v, e := out.Get(i)
 		if e == ErrOOB {
 
-			if int(i) == len(input)-len(coeff) {
+			if i == len(input)-len(coeff) {
 				t.Log("clean end")
 				break
 			} else {
@@ -138,7 +138,7 @@ func TestDiff(t *testing.T) {
 		}
 		t.Log(i, v)
 		if v.Data[0] != expected[i] {
-			t.Fatalf("expected %f, got %f", expected[i], v)
+			t.Fatalf("expected %f, got %f", expected[i], v.Data[0])
 		}
 	}
 	app.Reset()

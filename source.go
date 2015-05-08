@@ -46,8 +46,8 @@ func (s *SourceProc) SetInputs(in ...Processer) {}
 func (s *SourceProc) Reset()                    {}
 
 // Get implements the dsp.Processer interface.
-func (s *SourceProc) Get(idx uint32) (Value, error) {
-	if int(idx) > len(s.data)-1 {
+func (s *SourceProc) Get(idx int) (Value, error) {
+	if idx < 0 || idx > len(s.data)-1 {
 		return nil, ErrOOB
 	}
 	return narray.NewArray(s.data[idx], s.dim), nil

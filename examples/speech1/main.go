@@ -22,13 +22,14 @@ func main() {
 
 	app := dsp.NewApp("Test Chain")
 
-	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep, false)
+	wavSource, err := wav.NewSourceProc(path, wav.Fs(fs))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	app.Add("wav", wavSource)
-	app.Add("window", dsp.Window(windowSize).Use(dsp.Hamming))
+
+	app.Add("window", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, false))
 	app.Add("spectral_energy", dsp.SpectralEnergy(logFFTSize))
 	app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients))
 	app.Add("log_filterbank", dsp.Log())

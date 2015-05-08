@@ -34,19 +34,19 @@ func main() {
 
 	app := dsp.NewApp("Speech Recognizer Front-End")
 
-	wavSource, err := wav.NewSourceProc(path, fs, windowSize, windowStep, false)
+	wavSource, err := wav.NewSourceProc(path, wav.Fs(fs))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	app.Add("waveform", wavSource)
-	app.Add("windowed", dsp.Window(windowSize).Use(dsp.Hamming))
+	app.Add("windowed", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, true))
 	app.Add("spectrum", dsp.SpectralEnergy(logFFTSize))
 	app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients))
 	app.Add("log filterbank", dsp.Log())
 	app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize))
 	app.Add("mean cepstrum", dsp.NewMAProc(cepstrumSize, cepMeanWin, bufSize))
-	app.Add("zero mean cepstrum", dsp.Sub())
+	app.Add("zero mean cepstrum", dsp.Sub(true))
 
 	app.Connect("windowed", "waveform")
 	app.Connect("spectrum", "windowed")
@@ -65,7 +65,7 @@ func main() {
 	app.Connect("max cepstral energy", "cepstral energy")
 
 	// Subtract approx. max energy from energy.
-	app.Add("normalized cepstral energy", dsp.Sub())
+	app.Add("normalized cepstral energy", dsp.Sub(true))
 	app.Connect("normalized cepstral energy", "cepstral energy", "max cepstral energy")
 
 	// Delta cepstrum features.

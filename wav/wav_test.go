@@ -8,7 +8,7 @@ import (
 
 func TestJSONStreamer(t *testing.T) {
 
-	ref := map[string]bool{"wav1": true, "wav2": true, "short": true}
+	ref := map[string]bool{"wav1": true, "wav2": true}
 	ids := []string{}
 	iter, err := NewIterator("../data", 8000, 2, 2)
 	if err != nil {
@@ -37,8 +37,8 @@ func TestJSONStreamer(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if i != 3 {
-		t.Fatalf("expected 3 waveforms, got %d", i)
+	if i != 2 {
+		t.Fatalf("expected 2 waveforms, got %d", i)
 	}
 
 	for _, v := range ids {
@@ -51,7 +51,7 @@ func TestJSONStreamer(t *testing.T) {
 
 func TestBounds(t *testing.T) {
 
-	ref := map[string]bool{"wav1": true, "wav2": true, "short": true}
+	ref := map[string]bool{"wav1": true, "wav2": true}
 	ids := []string{}
 	iter, err := NewIterator("../data", 8000, 2, 2)
 	if err != nil {
@@ -90,8 +90,8 @@ func TestBounds(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if i != 3 {
-		t.Fatalf("expected 3 waveforms, got %d", i)
+	if i != 2 {
+		t.Fatalf("expected 2 waveforms, got %d", i)
 	}
 
 	for _, v := range ids {

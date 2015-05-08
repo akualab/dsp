@@ -12,15 +12,26 @@ import (
 	narray "github.com/akualab/narray/na64"
 )
 
-const defaultBufSize = 100
+const defaultBufSize = 1000
 
 // Value is an multidimensional array that satisfies the framer interface.
 type Value *narray.NArray
 
+// Scale returns a scaled vector.
+func Scale(alpha float64) Processer {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
+		vec, err := in[0].Get(idx)
+		if err != nil {
+			return nil, err
+		}
+		return narray.Scale(nil, vec, alpha), nil
+	})
+}
+
 // AddScaled adds frames from all inputs and scales the added values.
 // Will panic if input frame sizes don't match.
 func AddScaled(size int, alpha float64) Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		numInputs := len(in)
 		v := narray.New(size)
 		for i := 0; i < numInputs; i++ {
@@ -35,18 +46,23 @@ func AddScaled(size int, alpha float64) Processer {
 	})
 }
 
-// Sub subtracts input[1] from input[0].
+// Sub subtracts in1 from in0.
+// If useZero is true, the index of in1 is set to zero.
 // Will panic if input frame sizes don't match.
-func Sub() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+func Sub(useZero bool) Processer {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		if len(in) != 2 {
 			return nil, fmt.Errorf("proc Sub needs 2 inputs got %d", len(in))
+		}
+		idx1 := 0
+		if !useZero {
+			idx1 = idx
 		}
 		vec0, e0 := in[0].Get(idx)
 		if e0 != nil {
 			return nil, e0
 		}
-		vec1, e1 := in[1].Get(idx)
+		vec1, e1 := in[1].Get(idx1)
 		if e1 != nil {
 			return nil, e1
 		}
@@ -57,7 +73,7 @@ func Sub() Processer {
 // Join stacks multiple input vectors into a single vector. Output vector size equals sum of input vector sizes.
 // Blocks until all input vectors are available.
 func Join() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		numInputs := len(in)
 		v := []float64{}
 		for i := 0; i < numInputs; i++ {
@@ -75,10 +91,10 @@ func Join() Processer {
 // SpectralEnergy computes the real FFT energy of the input frame.
 // See dsp.RealFT and dsp.DFTEnergy for details.
 // The size of the output vector is 2^logSize.
-func SpectralEnergy(logSize uint) Processer {
-	fs := 1 << logSize // output frame size
+func SpectralEnergy(logSize int) Processer {
+	fs := 1 << uint(logSize) // output frame size
 	dftSize := 2 * fs
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		dft := make([]float64, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
 		vec, err := in[0].Get(idx)
 		if err != nil {
@@ -120,7 +136,7 @@ var (
 // Filterbank computes filterbank energies using the provided indices and coefficients.
 func Filterbank(indices []int, coeff [][]float64) Processer {
 	nf := len(indices) // num filterbanks
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		vec, err := in[0].Get(idx)
 		if err != nil {
 			return nil, err
@@ -137,7 +153,7 @@ func Filterbank(indices []int, coeff [][]float64) Processer {
 
 // Log returns the natural logarithm of the input.
 func Log() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		vec, err := in[0].Get(idx)
 		if err != nil {
 			return nil, err
@@ -148,7 +164,7 @@ func Log() Processer {
 
 // Sum returns the sum of the elements of the input frame.
 func Sum() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		vec, err := in[0].Get(idx)
 		if err != nil {
 			return nil, err
@@ -171,10 +187,10 @@ MaxNorm returns a norm value as follows:
 The max value is computed in the range {0...idx}
 */
 func MaxNorm(bufSize int, alpha float64) Processer {
-	return NewProc(bufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(bufSize, func(idx int, in ...Processer) (Value, error) {
 		max := 0.0
 		norm := 0.0
-		var i uint32
+		var i int
 		for ; i <= idx; i++ {
 			y := norm * alpha
 			vec, err := in[0].Get(idx)
@@ -194,7 +210,7 @@ func MaxNorm(bufSize int, alpha float64) Processer {
 func DCT(inSize, outSize int) Processer {
 
 	dct := GenerateDCT(outSize+1, inSize)
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 
 		input, err := in[0].Get(idx)
 		if err != nil {
@@ -235,7 +251,7 @@ for i < M.
 */
 type MAProc struct {
 	dim, bufSize int
-	winSize      uint32
+	winSize      int
 	*Proc
 }
 
@@ -244,14 +260,14 @@ func NewMAProc(dim, winSize, bufSize int) *MAProc {
 	ma := &MAProc{
 		dim:     dim,
 		bufSize: bufSize,
-		winSize: uint32(winSize),
+		winSize: winSize,
 		Proc:    NewProc(bufSize, nil),
 	}
 	return ma
 }
 
 // Get implements the dsp.Processer interface.
-func (ma *MAProc) Get(idx uint32) (Value, error) {
+func (ma *MAProc) Get(idx int) (Value, error) {
 	val, ok := ma.GetCache(idx)
 	if ok {
 		return val, nil
@@ -300,7 +316,6 @@ type DiffProc struct {
 	buf       []Value
 	coeff     []float64
 	cacheSize int
-	cache     *cache
 	*Proc
 }
 
@@ -317,35 +332,37 @@ func NewDiffProc(dim, bufSize int, coeff []float64) *DiffProc {
 }
 
 // Get implements the dsp.Processer interface.
-func (dp *DiffProc) Get(idx uint32) (Value, error) {
-
+func (dp *DiffProc) Get(idx int) (Value, error) {
+	if idx < 0 {
+		return nil, ErrOOB
+	}
 	val, ok := dp.GetCache(idx)
 	if ok {
 		return val, nil
 	}
-	sum := narray.New(dp.dim)
-	var j uint32
-	for ; j < uint32(dp.delta); j++ {
+	res := narray.New(dp.dim)
+	for j := 0; j < dp.delta; j++ {
 		plus, ep := dp.Input(0).Get(idx + j + 1)
-		if ep == ErrOOB {
-			break
-		}
 		if ep != nil {
 			return nil, ep
 		}
 		minus, em := dp.Input(0).Get(idx - j - 1)
 		if em == ErrOOB {
+			// Repeat next frame.
+			res, em = dp.Get(idx + 1)
+			if em != nil {
+				return nil, em
+			}
 			break
 		}
 		if em != nil {
 			return nil, em
 		}
-		narray.AddScaled(sum, plus, dp.coeff[j])
-		narray.AddScaled(sum, minus, -dp.coeff[j])
+		narray.AddScaled(res, plus, dp.coeff[j])
+		narray.AddScaled(res, minus, -dp.coeff[j])
 	}
-
-	dp.SetCache(idx, sum)
-	return sum, nil
+	dp.SetCache(idx, res)
+	return res, nil
 }
 
 // MaxXCorrIndex returns the lag that maximizes the cross-correlation between two inputs.
@@ -355,7 +372,7 @@ func (dp *DiffProc) Get(idx uint32) (Value, error) {
 // Returns the value of i that maximizes xcorr[i] and the max correlation value in a two-dimensional vector.
 // value[0]=lag, value[1]=xcorr
 func MaxXCorrIndex(lagLimit int) Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		if len(in) != 2 {
 			return nil, fmt.Errorf("proc Corr needs 2 inputs got %d", len(in))
 		}
@@ -368,7 +385,7 @@ func MaxXCorrIndex(lagLimit int) Processer {
 			return nil, e1
 		}
 		maxLag := 0
-		maxCorr := 0.0
+		maxCorr := -math.MaxFloat64
 		n0 := len(vec0.Data)
 		n1 := len(vec1.Data)
 		for lag := 0; lag < lagLimit; lag++ {
@@ -395,9 +412,9 @@ func MaxXCorrIndex(lagLimit int) Processer {
 // MaxWin returns the max value elementwise on a single input stream. Iterates over all the vectors
 // of the input stream.
 func MaxWin() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		var max *narray.NArray
-		var i uint32
+		var i int
 		for {
 			vec, err := in[0].Get(i)
 			if err == ErrOOB {
@@ -422,9 +439,9 @@ func MaxWin() Processer {
 //  mean = sum in_frame[i] where mean and in_frame are vectors.
 //         i=0
 func Mean() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		var mean *narray.NArray
-		var i uint32
+		var i int
 		for {
 			vec, err := in[0].Get(i)
 			if err == ErrOOB {
@@ -444,7 +461,7 @@ func Mean() Processer {
 
 // MSE returns the mean squared error between two inputs.
 func MSE() Processer {
-	return NewProc(defaultBufSize, func(idx uint32, in ...Processer) (Value, error) {
+	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		if len(in) != 2 {
 			return nil, fmt.Errorf("proc MSE needs 2 inputs got %d", len(in))
 		}

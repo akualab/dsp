@@ -25,23 +25,26 @@ const (
 
 // WindowProc is a window processor.
 type WindowProc struct {
+	StepSize   int
 	WinSize    int
 	WindowType int
 	data       []float64
 	err        error
 	inputs     []Processer
+	Centered   bool
+	*Proc
 }
 
-// Window returns a window processor with a rectangular shape.
-func Window(winSize int) *WindowProc {
-	return &WindowProc{
+// NewWindowProc returns a windowing processor.
+// Input must return all source data on index zero.
+func NewWindowProc(stepSize, winSize, windowType int, centered bool) *WindowProc {
+	win := &WindowProc{
+		StepSize:   stepSize,
 		WinSize:    winSize,
-		WindowType: Rectangular,
+		WindowType: windowType,
+		Centered:   centered,
+		Proc:       NewProc(defaultBufSize, nil),
 	}
-}
-
-// Use sets the window type.
-func (win *WindowProc) Use(windowType int) *WindowProc {
 
 	win.WindowType = windowType
 	switch windowType {
@@ -65,29 +68,48 @@ func (win *WindowProc) SetInputs(in ...Processer) {
 	win.inputs = in
 }
 
-// Reset WindowProc processor.
-func (win *WindowProc) Reset() {}
-
 // Get implements the dsp.Processer interface.
-func (win *WindowProc) Get(idx uint32) (Value, error) {
-	vec, err := win.inputs[0].Get(idx)
+func (win *WindowProc) Get(idx int) (Value, error) {
+	if idx < 0 {
+		return nil, ErrOOB
+	}
+	val, ok := win.GetCache(idx)
+	if ok {
+		return val, nil
+	}
+	vec, err := win.inputs[0].Get(0)
 	if err != nil {
 		return nil, err
 	}
-	//	inSize := len(vec)
 	inSize := vec.Shape[0]
-	if win.WinSize > inSize {
-		return nil, fmt.Errorf("window size [%d] is larger than input vector size [%d]", win.WinSize, inSize)
+	ss := win.StepSize
+	ws := win.WinSize
+	if ws > inSize {
+		return nil, fmt.Errorf("window size [%d] is larger than input vector [%d]", win.WinSize, inSize)
 	}
 	v := narray.New(win.WinSize)
-	if win.WindowType == Rectangular {
-		copy(v.Data, vec.Data)
-	} else {
-		// Multiply by data in slice.
-		for i, _ := range win.data {
-			v.Data[i] = vec.Data[i] * win.data[i]
+
+	pr := int(idx) * ss
+	pq := pr
+	if win.Centered {
+		ps := pr + ss/2
+		pq = ps - ws/2
+	}
+	pu := pq + ws
+	if pu > inSize {
+		return nil, ErrOOB
+	}
+	var i int
+	if pq < 0 {
+		// Reflect waveform.
+		for i = 0; i < (-pq); i++ {
+			v.Data[i] = vec.Data[-pq-i] * win.data[i]
 		}
 	}
+	for ; i < ws; i++ {
+		v.Data[i] = vec.Data[i+pq] * win.data[i]
+	}
+	win.SetCache(idx, v)
 	return v, nil
 }
 
