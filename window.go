@@ -50,7 +50,7 @@ func NewWindowProc(stepSize, winSize, windowType int, centered bool) *WindowProc
 	switch windowType {
 
 	case Rectangular:
-
+		win.data = RectangularWindow(win.WinSize)
 	case Hanning:
 		win.data = HanningWindow(win.WinSize)
 	case Hamming:
@@ -132,6 +132,16 @@ func WindowSlice(winType, winSize int) ([]float64, error) {
 	default:
 		return nil, fmt.Errorf("Unknow window type: %d", winType)
 	}
+}
+
+// RectangularWindow returns a rectangular window.
+// w(t) = 1.0
+func RectangularWindow(n int) []float64 {
+	data := make([]float64, n, n)
+	for i := 0; i < n; i++ {
+		data[i] = 1.0
+	}
+	return data
 }
 
 // HanningWindow returns a Hanning window.

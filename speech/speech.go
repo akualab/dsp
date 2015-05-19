@@ -24,6 +24,8 @@ type Config struct {
 	WinSize int
 	// Frame advance step in samples.
 	WinStep int
+	// Window Type (0: Rect, 1: Hann, 2: Hamm, 3: Blackman)
+	WinType int
 	// Log of the FFT size in samples.
 	LogFFTSize int
 	// Number fo filterbank elements.
@@ -36,6 +38,20 @@ type Config struct {
 	CepSize int
 	// Coefficients for computing deltas.
 	DeltaCoeff []float64
+	// Name of the feature(s).
+	Features []string
+	// Dim is the dimension of the feature vector.
+	Dim int
+}
+
+// DefaultFeatures has a list of the default feature names.
+var DefaultFeatures = []string{
+	"normalized cepstral energy",
+	"delta energy",
+	"delta delta energy",
+	"zm cepstrum",
+	"delta cepstrum",
+	"delta delta cepstrum",
 }
 
 // New creates a new speech dsp app.
@@ -43,7 +59,7 @@ func New(name string, source *wav.SourceProc, c Config) (*dsp.App, error) {
 
 	app := dsp.NewApp(name)
 	app.Add("wav", source)
-	app.Add("windowed", dsp.NewWindowProc(c.WinStep, c.WinSize, dsp.Hamming, true))
+	app.Add("windowed", dsp.NewWindowProc(c.WinStep, c.WinSize, c.WinType, true))
 	app.Add("spectrum", dsp.SpectralEnergy(c.LogFFTSize))
 	indices, coeff := dsp.GenerateFilterbank(1<<uint(c.LogFFTSize), c.FBSize, c.FS, c.FBMinFreq, c.FBMaxFreq)
 	app.Add("filterbank", dsp.Filterbank(indices, coeff))
@@ -84,13 +100,6 @@ func New(name string, source *wav.SourceProc, c Config) (*dsp.App, error) {
 
 	// Put three energy features and cepstrum features in a single vector.
 	app.Add("combined", dsp.Join())
-	app.Connect("combined",
-		"normalized cepstral energy",
-		"delta energy",
-		"delta delta energy",
-		"zm cepstrum",
-		"delta cepstrum",
-		"delta delta cepstrum")
-
+	app.Connect("combined", c.Features...)
 	return app, nil
 }

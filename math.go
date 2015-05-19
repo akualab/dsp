@@ -277,7 +277,7 @@ func GenerateFilterbank(n, nf int, freq ...float64) ([]int, [][]float64) {
 			panic(fmt.Errorf("bad freq combination, got fs:%f, min:%f, max:%f", freq[0], min, max))
 		}
 		start = int(float64(n) * min / fn)
-		end = int(float64(n) * (fn - max) / fn)
+		end = int(float64(n) * max / fn)
 		nn = end - start
 	}
 	if nn < nf {

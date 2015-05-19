@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Called a Proc that has no ProcFunc set.
@@ -149,7 +150,7 @@ func (t Tap) Get(idx int) (Value, error) {
 
 // Add adds a processor with a name.
 func (app *App) Add(name string, p Processer) string {
-	app.procs[name] = p
+	app.procs[strings.TrimSpace(name)] = p
 	return name
 }
 
@@ -160,9 +161,9 @@ func (app *App) Add(name string, p Processer) string {
 func (app *App) Connect(to string, from ...string) {
 
 	inputs := []Processer{}
-	toProc := app.mustGet(to)
+	toProc := app.mustGet(strings.TrimSpace(to))
 	for _, in := range from {
-		input := app.mustGet(in)
+		input := app.mustGet(strings.TrimSpace(in))
 		inputs = append(inputs, input)
 	}
 	toProc.SetInputs(inputs...)

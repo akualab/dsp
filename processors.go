@@ -89,8 +89,8 @@ func Join() Processer {
 }
 
 // SpectralEnergy computes the real FFT energy of the input frame.
+// FFT size is 2^(logSize+1) and the size of the output vector is 2^logSize.
 // See dsp.RealFT and dsp.DFTEnergy for details.
-// The size of the output vector is 2^logSize.
 func SpectralEnergy(logSize int) Processer {
 	fs := 1 << uint(logSize) // output frame size
 	dftSize := 2 * fs
@@ -375,6 +375,9 @@ func MaxXCorrIndex(lagLimit int) Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		if len(in) != 2 {
 			return nil, fmt.Errorf("proc Corr needs 2 inputs got %d", len(in))
+		}
+		if idx < 0 {
+			return nil, fmt.Errorf("got negative index: %d", idx)
 		}
 		vec0, e0 := in[0].Get(0)
 		if e0 != nil {
