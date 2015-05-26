@@ -110,20 +110,37 @@ func (bp *Proc) Input(n int) Processer {
 type App struct {
 	// App name.
 	Name   string
-	procs  map[string]Processer
-	inputs map[string][]string
+	procs  map[string]Node
+	inputs map[Node][]Node
+}
+
+// Node is a node in the processor graph.
+type Node struct {
+	name string
+	typ  Processer
+}
+
+// Name of the processor.
+func (n Node) Name() string {
+	return n.name
+}
+
+// Get returns the value for frame index.
+func (n Node) Get(idx int) (Value, error) {
+	return n.typ.Get(idx)
 }
 
 // NewApp returns a new app.
 func NewApp(name string) *App {
 	return &App{
 		Name:   name,
-		procs:  make(map[string]Processer),
-		inputs: make(map[string][]string),
+		procs:  make(map[string]Node),
+		inputs: make(map[Node][]Node),
 	}
 }
 
-func (app *App) mustGet(name string) Processer {
+// NodeByName returns a node from the processor graph.
+func (app *App) NodeByName(name string) Node {
 	proc, ok := app.procs[name]
 	if !ok {
 		panic(fmt.Errorf("no processor named [%s] in builder graph", name))
@@ -131,58 +148,78 @@ func (app *App) mustGet(name string) Processer {
 	return proc
 }
 
-// Tap provides access to values in the processor graph.
-type Tap struct {
-	proc Processer
-}
-
-// NewTap returns a tap for the output of the named processor.
-func (app *App) NewTap(name string) Tap {
-	return Tap{
-		proc: app.mustGet(name),
+// NodesByName converts a list of names into a list of nodes.
+func (app *App) NodesByName(names ...string) ([]Node, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("the names argument is empty, need at least one name")
 	}
-}
-
-// Get returns the value for frame index.
-func (t Tap) Get(idx int) (Value, error) {
-	return t.proc.Get(idx)
+	nodes := []Node{}
+	for _, name := range names {
+		node, ok := app.procs[name]
+		if !ok {
+			return nil, fmt.Errorf("no processor named [%s] in builder graph", name)
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
 }
 
 // Add adds a processor with a name.
-func (app *App) Add(name string, p Processer) string {
-	app.procs[strings.TrimSpace(name)] = p
-	return name
+func (app *App) Add(name string, p Processer) Node {
+	nodeName := strings.TrimSpace(name)
+	_, ok := app.procs[nodeName]
+	if ok {
+		panic(fmt.Errorf("there is already a processor named [%s] in builder graph", nodeName))
+	}
+	n := Node{name: nodeName, typ: p}
+	app.procs[nodeName] = n
+	return n
 }
 
 // Connect connects processor inputs. Example:
-//    app.Connect("y", "x1", "x2")
-// the output values of processors with name "x1" and "x2" are
-// inputs to processor names "y".
-func (app *App) Connect(to string, from ...string) {
-
+//    var y,x1,x2 dsp.Node
+//    ...
+//    out := app.Connect(y, x1, x2)
+// the output values of processors x1 and x2 are
+// inputs to processor y. Returns node corresponding to processor y.
+func (app *App) Connect(to Node, from ...Node) Node {
 	inputs := []Processer{}
-	toProc := app.mustGet(strings.TrimSpace(to))
 	for _, in := range from {
-		input := app.mustGet(strings.TrimSpace(in))
-		inputs = append(inputs, input)
+		inputs = append(inputs, in.typ)
 	}
-	toProc.SetInputs(inputs...)
+	to.typ.SetInputs(inputs...)
 	app.inputs[to] = from
+	return to
+}
+
+// Chain connects a sequence of processors
+// as follows:
+//    var p0, p1, p2, p3 dsp.Node
+//    ...
+//    out := app.Pipe(p0, p1, p2, p3)
+// p0 <= p1 <= p2 <= p3 (the last processor in the chain is p0
+// which is return by the method.
+func (app *App) Chain(nodes ...Node) Node {
+	for k := 0; k < len(nodes)-1; k++ {
+		nodes[k].typ.SetInputs(nodes[k+1].typ)
+		app.inputs[nodes[k]] = []Node{nodes[k+1]}
+	}
+	return nodes[0]
 }
 
 // Reset resets all processors in preparation for a new stream.
 func (app *App) Reset() {
 	for _, p := range app.procs {
-		p.Reset()
+		p.typ.Reset()
 	}
 }
 
 func (app *App) String() string {
 
 	var buf bytes.Buffer
-	for name, _ := range app.procs {
+	for name, node := range app.procs {
 		buf.WriteString(fmt.Sprintf("proc: %s, inputs: | ", name))
-		for _, in := range app.inputs[name] {
+		for _, in := range app.inputs[node] {
 			buf.WriteString(fmt.Sprintf("%s | ", in))
 		}
 		buf.WriteString("\n")

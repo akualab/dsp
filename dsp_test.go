@@ -46,14 +46,18 @@ func TestMain(m *testing.M) {
 
 	// Use processors.
 	app = NewApp("Test DFT Egy")
-	app.Add("wav", wavSP(x))
-	app.Add("spectrum", SpectralEnergy(3))
-	app.Connect("spectrum", "wav")
-
-	app.Add("filterbank", Filterbank(testFBInd, testFBCoeff))
-	app.Add("log filterbank", Log())
-	app.Connect("filterbank", "spectrum")
-	app.Connect("log filterbank", "filterbank")
+	app.Connect(
+		app.Add("spectrum", SpectralEnergy(3)),
+		app.Add("wav", wavSP(x)),
+	)
+	app.Connect(
+		app.Add("filterbank", Filterbank(testFBInd, testFBCoeff)),
+		app.NodeByName("spectrum"),
+	)
+	app.Connect(
+		app.Add("log filterbank", Log()),
+		app.NodeByName("filterbank"),
+	)
 
 	os.Exit(m.Run())
 }
@@ -74,10 +78,9 @@ func square(idx int, in ...Processer) (Value, error) {
 func TestGraph(t *testing.T) {
 
 	app := NewApp("test")
-	app.Add("numbers", NewProc(10, numbers))
-	app.Add("square", NewProc(10, square))
-	app.Connect("square", "numbers")
-	sq := app.NewTap("square")
+	numbers := app.Add("numbers", NewProc(10, numbers))
+	sq := app.Add("square", NewProc(10, square))
+	app.Connect(sq, numbers)
 
 	for i := 0; i < 10; i++ {
 		v, err := sq.Get(i)
@@ -91,7 +94,7 @@ func TestGraph(t *testing.T) {
 func TestDFTEgyFeature(t *testing.T) {
 
 	app.Reset()
-	sp := app.NewTap("spectrum")
+	sp := app.NodeByName("spectrum")
 
 	// Compare results.
 	cnt := 0
@@ -116,7 +119,7 @@ func TestDFTEgyFeature(t *testing.T) {
 func TestFB(t *testing.T) {
 
 	app.Reset()
-	feat := app.NewTap("filterbank")
+	feat := app.NodeByName("filterbank")
 	t.Log("fb", fb)
 	// Compare results.
 	cnt := 0
@@ -141,7 +144,7 @@ func TestFB(t *testing.T) {
 func TestLogFB(t *testing.T) {
 
 	app.Reset()
-	feat := app.NewTap("log filterbank")
+	feat := app.NodeByName("log filterbank")
 	t.Log("logfb", logfb)
 
 	// Compare results.

@@ -19,23 +19,23 @@ func ExampleSpectrum() {
 	}
 
 	// Add the source processor responsible for reading and supplying waveform samples.
-	app.Add("wav", wavSource)
+	wav := app.Add("wav", wavSource)
 
 	// Use a windowing processor to segment the waveform into frames of 80 samples
 	// and apply a Hamming window of size 205. The last arg is to instruct the processor
 	// to center the frame in the middle of the window.
-	app.Add("window", dsp.NewWindowProc(80, 205, dsp.Hamming, true))
+	window := app.Add("window", dsp.NewWindowProc(80, 205, dsp.Hamming, true))
 
 	// Compute the FFT of the windowed frame. The FFT size is 2**8.
-	app.Add("spectrum", dsp.SpectralEnergy(8))
+	spectrum := app.Add("spectrum", dsp.SpectralEnergy(8))
 
 	// Connect the processors.
 	// wav -> window -> spectrum
-	app.Connect("window", "wav")
-	app.Connect("spectrum", "window")
+	app.Connect(window, wav)
+	app.Connect(spectrum, window)
 
 	// Get features using this object.
-	out := app.NewTap("spectrum")
+	out := spectrum
 
 	// Get the next waveform. (This processor is designed to read a list of
 	// files. The Next() method loads the next waveform in the list.)

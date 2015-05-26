@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/akualab/dsp"
+	"github.com/akualab/dsp/speech"
 	"github.com/akualab/dsp/wav"
 )
 
@@ -32,65 +33,29 @@ var deltaCoeff = []float64{0.7, 0.2, 0.1}
 // I leave it as an exercise for the reader :-)
 func main() {
 
-	app := dsp.NewApp("Speech Recognizer Front-End")
+	c := speech.Config{
+		FS:         8000,
+		BufSize:    100,
+		WinSize:    205,
+		WinStep:    80,
+		WinType:    dsp.Hamming,
+		LogFFTSize: 8,
+		FBSize:     18,
+		FBMinFreq:  10,
+		FBMaxFreq:  3500,
+		CepSize:    8,
+		DeltaCoeff: deltaCoeff,
+	}
 
 	wavSource, err := wav.NewSourceProc(path, wav.Fs(fs))
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	app.Add("waveform", wavSource)
-	app.Add("windowed", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, true))
-	app.Add("spectrum", dsp.SpectralEnergy(logFFTSize))
-	app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients))
-	app.Add("log filterbank", dsp.Log())
-	app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize))
-	app.Add("mean cepstrum", dsp.NewMAProc(cepstrumSize, cepMeanWin, bufSize))
-	app.Add("zero mean cepstrum", dsp.Sub(true))
-
-	app.Connect("windowed", "waveform")
-	app.Connect("spectrum", "windowed")
-	app.Connect("filterbank", "spectrum")
-	app.Connect("log filterbank", "filterbank")
-	app.Connect("cepstrum", "log filterbank")
-	app.Connect("mean cepstrum", "cepstrum")
-
-	// mean cep uses two inputs
-	app.Connect("zero mean cepstrum", "cepstrum", "mean cepstrum")
-
-	// Energy features.
-	app.Add("cepstral energy", dsp.Sum())
-	app.Add("max cepstral energy", dsp.MaxNorm(bufSize, maxNormAlpha))
-	app.Connect("cepstral energy", "log filterbank")
-	app.Connect("max cepstral energy", "cepstral energy")
-
-	// Subtract approx. max energy from energy.
-	app.Add("normalized cepstral energy", dsp.Sub(true))
-	app.Connect("normalized cepstral energy", "cepstral energy", "max cepstral energy")
-
-	// Delta cepstrum features.
-	app.Add("delta cepstrum", dsp.NewDiffProc(cepstrumSize, bufSize, deltaCoeff))
-	app.Add("delta delta cepstrum", dsp.NewDiffProc(cepstrumSize, bufSize, deltaCoeff))
-	app.Connect("delta cepstrum", "zero mean cepstrum")
-	app.Connect("delta delta cepstrum", "delta cepstrum")
-
-	// Delta energy features.
-	app.Add("delta energy", dsp.NewDiffProc(1, bufSize, deltaCoeff))
-	app.Add("delta delta energy", dsp.NewDiffProc(1, bufSize, deltaCoeff))
-	app.Connect("delta energy", "normalized cepstral energy")
-	app.Connect("delta delta energy", "delta energy")
-
-	// Put three cepstrum features and three energy features in a single vector.
-	app.Add("combined", dsp.Join())
-	out := app.NewTap("combined")
-
-	app.Connect("combined",
-		"normalized cepstral energy",
-		"delta energy",
-		"delta delta energy",
-		"zero mean cepstrum",
-		"delta cepstrum",
-		"delta delta cepstrum")
+	app, err := speech.New("Speech Recognizer Front-End", wavSource, c)
+	if err != nil {
+		log.Fatalf("can't init speech app, error: %s", err)
+	}
+	out := app.NodeByName("combined")
 
 	for {
 		// load next wav
@@ -109,8 +74,7 @@ func main() {
 		}
 		app.Reset()
 		log.Printf("processing waveform [%s] with %d frames, mean: %6.2f, sd: %6.2f", id, numFrames, wavSource.Mean(), wavSource.SD())
-		var i uint32
-		for ; ; i++ {
+		for i := 0; ; i++ {
 			v, e := out.Get(i)
 			if e == dsp.ErrOOB {
 				log.Printf("done processing %d frames for waveform [%s]", i, id)
@@ -119,7 +83,7 @@ func main() {
 			if e != nil {
 				log.Fatal(e)
 			}
-			log.Printf("feature: cepstrum, frame: %d, data: %v", i, v.Data)
+			log.Printf("feature: %s, frame: %d, data: %v", out.Name(), i, v.Data)
 		}
 	}
 }

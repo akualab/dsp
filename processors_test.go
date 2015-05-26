@@ -16,17 +16,15 @@ func TestAddScaled(t *testing.T) {
 	dim := 2
 	app := NewApp("Test")
 
-	app.Add("s1", Source(dim, 20, NewRandom(99)))
-	app.Add("s2", Source(dim, 20, NewRandom(99)))
-	app.Add("p1", AddScaled(dim, 0.5))
-	app.Add("p2", WriteValues(os.Stdout, testing.Verbose()))
+	s1 := app.Add("s1", Source(dim, 20, NewRandom(99)))
+	s2 := app.Add("s2", Source(dim, 20, NewRandom(99)))
+	p1 := app.Add("p1", AddScaled(dim, 0.5))
+	p2 := app.Add("p2", WriteValues(os.Stdout, testing.Verbose()))
 
-	app.Connect("p1", "s1", "s2")
-	app.Connect("p2", "p1")
+	app.Connect(p1, s1, s2)
+	app.Connect(p2, p1)
 
-	s1 := app.NewTap("s1")
-	s2 := app.NewTap("s2")
-	out := app.NewTap("p2")
+	out := app.NodeByName("p2")
 	var i int
 	for ; i < 10; i++ {
 		v1, _ := s1.Get(i)
@@ -51,12 +49,12 @@ func TestJoin(t *testing.T) {
 	dim := 4
 	app := NewApp("Test")
 
-	app.Add("s1", Source(dim, 40, NewCounter()))
-	app.Add("s2", Source(dim, 40, NewCounter()))
-	app.Add("join", Join())
+	s1 := app.Add("s1", Source(dim, 40, NewCounter()))
+	s2 := app.Add("s2", Source(dim, 40, NewCounter()))
+	join := app.Add("join", Join())
 
-	app.Connect("join", "s1", "s2")
-	out := app.NewTap("join")
+	app.Connect(join, s1, s2)
+	out := join
 	for k := 0; k < 2; k++ {
 		var i int
 		for ; i < 20; i++ {
@@ -85,11 +83,11 @@ func TestMovingAverage(t *testing.T) {
 	expected := []float64{1, 2, 3, 3, 3, 3, 5, 3, 2, 0}
 
 	app := NewApp("Test MA")
-	app.Add("source", Source(1, len(input), NewSlice(input)))
-	app.Add("moving average", NewMAProc(1, 4, 20))
+	src := app.Add("source", Source(1, len(input), NewSlice(input)))
+	ma := app.Add("moving average", NewMAProc(1, 4, 20))
 
-	app.Connect("moving average", "source")
-	out := app.NewTap("moving average")
+	app.Connect(ma, src)
+	out := ma
 
 	app.Reset()
 	var i int
@@ -114,11 +112,11 @@ func TestDiff(t *testing.T) {
 	expected := []float64{4, 4, 4, 1, -5, -3, -1, 3, -3}
 	coeff := []float64{0, 1}
 	app := NewApp("Test Diff")
-	app.Add("source", Source(1, len(input), NewSlice(input)))
-	app.Add("diff", NewDiffProc(1, 20, coeff))
+	src := app.Add("source", Source(1, len(input), NewSlice(input)))
+	diff := app.Add("diff", NewDiffProc(1, 20, coeff))
 
-	app.Connect("diff", "source")
-	out := app.NewTap("diff")
+	app.Connect(diff, src)
+	out := diff
 
 	app.Reset()
 	for i := 0; i < int(len(input)); i++ {

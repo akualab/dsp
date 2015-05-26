@@ -40,8 +40,6 @@ type Config struct {
 	DeltaCoeff []float64
 	// Name of the feature(s).
 	Features []string
-	// Dim is the dimension of the feature vector.
-	Dim int
 }
 
 // DefaultFeatures has a list of the default feature names.
@@ -57,49 +55,78 @@ var DefaultFeatures = []string{
 // New creates a new speech dsp app.
 func New(name string, source *wav.SourceProc, c Config) (*dsp.App, error) {
 
+	if len(c.Features) == 0 {
+		c.Features = DefaultFeatures
+	}
 	app := dsp.NewApp(name)
-	app.Add("wav", source)
-	app.Add("windowed", dsp.NewWindowProc(c.WinStep, c.WinSize, c.WinType, true))
-	app.Add("spectrum", dsp.SpectralEnergy(c.LogFFTSize))
 	indices, coeff := dsp.GenerateFilterbank(1<<uint(c.LogFFTSize), c.FBSize, c.FS, c.FBMinFreq, c.FBMaxFreq)
-	app.Add("filterbank", dsp.Filterbank(indices, coeff))
-	app.Add("log filterbank", dsp.Log())
-	app.Add("cepstrum", dsp.DCT(c.FBSize, c.CepSize))
-	app.Add("mean cepstrum", dsp.Mean())
-	app.Add("zm cepstrum", dsp.Sub(true))
 
-	app.Connect("windowed", "wav")
-	app.Connect("spectrum", "windowed")
-	app.Connect("filterbank", "spectrum")
-	app.Connect("log filterbank", "filterbank")
-	app.Connect("cepstrum", "log filterbank")
-	app.Connect("mean cepstrum", "cepstrum")
-	app.Connect("zm cepstrum", "cepstrum", "mean cepstrum")
+	cep := app.Chain(
+		app.Add("cepstrum", dsp.DCT(c.FBSize, c.CepSize)),
+		app.Add("log filterbank", dsp.Log()),
+		app.Add("filterbank", dsp.Filterbank(indices, coeff)),
+		app.Add("spectrum", dsp.SpectralEnergy(c.LogFFTSize)),
+		app.Add("windowed", dsp.NewWindowProc(c.WinStep, c.WinSize, c.WinType, true)),
+		app.Add("wav", source),
+	)
+
+	meanCep := app.Connect(
+		app.Add("mean cepstrum", dsp.Mean()),
+		cep,
+	)
+
+	zmCep := app.Connect(
+		app.Add("zm cepstrum", dsp.Sub(true)),
+		cep,
+		meanCep,
+	)
 
 	// Energy features.
-	app.Add("cepstral energy", dsp.Sum())
-	app.Add("max cepstral energy", dsp.MaxWin())
-	app.Connect("cepstral energy", "log filterbank")
-	app.Connect("max cepstral energy", "cepstral energy")
+	egy := app.Connect(
+		app.Add("cepstral energy", dsp.Sum()),
+		app.NodeByName("log filterbank"),
+	)
+
+	maxEgy := app.Connect(
+		app.Add("max cepstral energy", dsp.MaxWin()),
+		egy,
+	)
 
 	// Subtract max energy from energy.
-	app.Add("normalized cepstral energy", dsp.Sub(true))
-	app.Connect("normalized cepstral energy", "cepstral energy", "max cepstral energy")
+	normEgy := app.Connect(
+		app.Add("normalized cepstral energy", dsp.Sub(true)),
+		egy,
+		maxEgy,
+	)
 
 	// Delta cepstrum features.
-	app.Add("delta cepstrum", dsp.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff))
-	app.Add("delta delta cepstrum", dsp.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff))
-	app.Connect("delta cepstrum", "zm cepstrum")
-	app.Connect("delta delta cepstrum", "delta cepstrum")
+	dCep := app.Connect(
+		app.Add("delta cepstrum", dsp.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff)),
+		zmCep,
+	)
+	app.Connect(
+		app.Add("delta delta cepstrum", dsp.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff)),
+		dCep,
+	)
 
 	// Delta energy features.
-	app.Add("delta energy", dsp.NewDiffProc(1, c.BufSize, c.DeltaCoeff))
-	app.Add("delta delta energy", dsp.NewDiffProc(1, c.BufSize, c.DeltaCoeff))
-	app.Connect("delta energy", "normalized cepstral energy")
-	app.Connect("delta delta energy", "delta energy")
+	dEgy := app.Connect(
+		app.Add("delta energy", dsp.NewDiffProc(1, c.BufSize, c.DeltaCoeff)),
+		normEgy,
+	)
+	app.Connect(
+		app.Add("delta delta energy", dsp.NewDiffProc(1, c.BufSize, c.DeltaCoeff)),
+		dEgy,
+	)
 
 	// Put three energy features and cepstrum features in a single vector.
-	app.Add("combined", dsp.Join())
-	app.Connect("combined", c.Features...)
+	nodes, err := app.NodesByName(c.Features...)
+	if err != nil {
+		return nil, err
+	}
+	app.Connect(
+		app.Add("combined", dsp.Join()),
+		nodes...,
+	)
 	return app, nil
 }

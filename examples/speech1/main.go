@@ -27,21 +27,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app.Add("wav", wavSource)
-
-	app.Add("window", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, false))
-	app.Add("spectral_energy", dsp.SpectralEnergy(logFFTSize))
-	app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients))
-	app.Add("log_filterbank", dsp.Log())
-	app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize))
-
-	app.Connect("window", "wav")
-	app.Connect("spectral_energy", "window")
-	app.Connect("filterbank", "spectral_energy")
-	app.Connect("log_filterbank", "filterbank")
-	app.Connect("cepstrum", "log_filterbank")
-
-	out := app.NewTap("cepstrum")
+	out := app.Chain(
+		app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize)),
+		app.Add("log_filterbank", dsp.Log()),
+		app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients)),
+		app.Add("spectral_energy", dsp.SpectralEnergy(logFFTSize)),
+		app.Add("window", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, false)),
+		app.Add("wav", wavSource),
+	)
 
 	for {
 		// load next wav
@@ -60,8 +53,7 @@ func main() {
 		}
 		app.Reset()
 		log.Printf("processing waveform [%s] with %d frames", id, numFrames)
-		var i uint32
-		for ; ; i++ {
+		for i := 0; ; i++ {
 			v, e := out.Get(i)
 			if e == dsp.ErrOOB {
 				log.Printf("done processing %d frames for waveform [%s]", i, id)
