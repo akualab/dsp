@@ -20,7 +20,7 @@ type Value *narray.NArray
 // Scale returns a scaled vector.
 func Scale(alpha float64) Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		vec, err := in[0].Get(idx)
+		vec, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -35,7 +35,7 @@ func AddScaled(size int, alpha float64) Processer {
 		numInputs := len(in)
 		v := narray.New(size)
 		for i := 0; i < numInputs; i++ {
-			vec, err := in[i].Get(idx)
+			vec, err := in[i].(Framer).Get(idx)
 			if err != nil {
 				return nil, err
 			}
@@ -46,23 +46,19 @@ func AddScaled(size int, alpha float64) Processer {
 	})
 }
 
-// Sub subtracts in1 from in0.
-// If useZero is true, the index of in1 is set to zero.
+// Sub subtracts in1 from in0. The inputs can be of type Framer of OneValuer.
+// (The method uses reflection to get the type. For higher performance, implement a custom processor.)
 // Will panic if input frame sizes don't match.
-func Sub(useZero bool) Processer {
+func Sub() Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		if len(in) != 2 {
 			return nil, fmt.Errorf("proc Sub needs 2 inputs got %d", len(in))
 		}
-		idx1 := 0
-		if !useZero {
-			idx1 = idx
-		}
-		vec0, e0 := in[0].Get(idx)
+		vec0, e0 := Get(in[0], idx)
 		if e0 != nil {
 			return nil, e0
 		}
-		vec1, e1 := in[1].Get(idx1)
+		vec1, e1 := Get(in[1], idx)
 		if e1 != nil {
 			return nil, e1
 		}
@@ -75,9 +71,13 @@ func Sub(useZero bool) Processer {
 func Join() Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		numInputs := len(in)
+		framers, err := Processers(in).CheckInputs(numInputs)
+		if err != nil {
+			return nil, err
+		}
 		v := []float64{}
 		for i := 0; i < numInputs; i++ {
-			vec, err := in[i].Get(idx)
+			vec, err := framers[i].Get(idx)
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +96,7 @@ func SpectralEnergy(logSize int) Processer {
 	dftSize := 2 * fs
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 		dft := make([]float64, dftSize, dftSize) // TODO: do not allocate every time. use slice pool?
-		vec, err := in[0].Get(idx)
+		vec, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -107,37 +107,11 @@ func SpectralEnergy(logSize int) Processer {
 	})
 }
 
-var (
-	// MelFilterbankIndices are the indices of the filters in the filterbank.
-	MelFilterbankIndices = []int{10, 11, 14, 17, 20, 23, 27, 30, 33, 36, 40, 45, 50, 56, 62, 69, 76, 84}
-	// MelFilterbankCoefficients is a hardcoded filterbank for the speech example.
-	MelFilterbankCoefficients = [][]float64{
-		[]float64{1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
-		[]float64{0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 0.66, 0.33},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25},
-		[]float64{0.33, 0.66, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8, 0.6, 0.4, 0.2},
-		[]float64{0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8, 0.6, 0.4, 0.2},
-		[]float64{0.2, 0.4, 0.6, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.83, 0.66, 0.5, 0.33, 0.16},
-		[]float64{0.2, 0.4, 0.6, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.83, 0.66, 0.5, 0.33, 0.16},
-		[]float64{0.16, 0.33, 0.5, 0.66, 0.83, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85, 0.71, 0.57, 0.42, 0.28, 0.14},
-		[]float64{0.16, 0.33, 0.5, 0.66, 0.83, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85, 0.71, 0.57, 0.42, 0.28, 0.14},
-		[]float64{0.14, 0.28, 0.42, 0.57, 0.71, 0.85, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125},
-		[]float64{0.142, 0.285, 0.428, 0.571, 0.714, 0.857, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.88, 0.77, 0.66, 0.55, 0.44, 0.33, 0.22, 0.11},
-		[]float64{0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.88, 0.77, 0.66, 0.55, 0.44, 0.33, 0.22, 0.11},
-		[]float64{0.11, 0.22, 0.33, 0.44, 0.55, 0.66, 0.77, 0.88, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0},
-	}
-)
-
 // Filterbank computes filterbank energies using the provided indices and coefficients.
 func Filterbank(indices []int, coeff [][]float64) Processer {
 	nf := len(indices) // num filterbanks
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		vec, err := in[0].Get(idx)
+		vec, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +128,7 @@ func Filterbank(indices []int, coeff [][]float64) Processer {
 // Log returns the natural logarithm of the input.
 func Log() Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		vec, err := in[0].Get(idx)
+		vec, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +139,7 @@ func Log() Processer {
 // Sum returns the sum of the elements of the input frame.
 func Sum() Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		vec, err := in[0].Get(idx)
+		vec, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -190,10 +164,9 @@ func MaxNorm(bufSize int, alpha float64) Processer {
 	return NewProc(bufSize, func(idx int, in ...Processer) (Value, error) {
 		max := 0.0
 		norm := 0.0
-		var i int
-		for ; i <= idx; i++ {
+		for i := 0; i <= idx; i++ {
 			y := norm * alpha
-			vec, err := in[0].Get(idx)
+			vec, err := Processers(in).Get(idx)
 			if err != nil {
 				return nil, err
 			}
@@ -212,7 +185,7 @@ func DCT(inSize, outSize int) Processer {
 	dct := GenerateDCT(outSize+1, inSize)
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
 
-		input, err := in[0].Get(idx)
+		input, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +255,7 @@ func (ma *MAProc) Get(idx int) (Value, error) {
 	sum := narray.New(ma.dim)
 	// TODO: no need to add every time, use a circular buffer.
 	for j := start; j <= idx; j++ {
-		v, e := ma.Input(0).Get(j)
+		v, e := ma.Framer(0).Get(j)
 		if e != nil {
 			return nil, e
 		}
@@ -342,11 +315,11 @@ func (dp *DiffProc) Get(idx int) (Value, error) {
 	}
 	res := narray.New(dp.dim)
 	for j := 0; j < dp.delta; j++ {
-		plus, ep := dp.Input(0).Get(idx + j + 1)
+		plus, ep := dp.Framer(0).Get(idx + j + 1)
 		if ep != nil {
 			return nil, ep
 		}
-		minus, em := dp.Input(0).Get(idx - j - 1)
+		minus, em := dp.Framer(0).Get(idx - j - 1)
 		if em == ErrOOB {
 			// Repeat next frame.
 			res, em = dp.Get(idx + 1)
@@ -366,7 +339,7 @@ func (dp *DiffProc) Get(idx int) (Value, error) {
 }
 
 // MaxXCorrIndex returns the lag that maximizes the cross-correlation between two inputs.
-// The input vectors are in0[0] and in1[0]. The param lagLimit is the highest lag value to be explored.
+// The param lagLimit is the highest lag value to be explored.
 // Input vectors may have different lengths.
 //  xcor[i] = x[n] * y[n-i]
 // Returns the value of i that maximizes xcorr[i] and the max correlation value in a two-dimensional vector.
@@ -379,11 +352,11 @@ func MaxXCorrIndex(lagLimit int) Processer {
 		if idx < 0 {
 			return nil, fmt.Errorf("got negative index: %d", idx)
 		}
-		vec0, e0 := in[0].Get(0)
+		vec0, e0 := in[0].(Framer).Get(idx)
 		if e0 != nil {
 			return nil, e0
 		}
-		vec1, e1 := in[1].Get(0)
+		vec1, e1 := in[1].(Framer).Get(idx)
 		if e1 != nil {
 			return nil, e1
 		}
@@ -412,14 +385,13 @@ func MaxXCorrIndex(lagLimit int) Processer {
 	})
 }
 
-// MaxWin returns the max value elementwise on a single input stream. Iterates over all the vectors
-// of the input stream.
+// MaxWin returns the elementwise max vector of the input stream.
 func MaxWin() Processer {
-	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
+	return NewOneProc(func(in ...Processer) (Value, error) {
 		var max *narray.NArray
 		var i int
 		for {
-			vec, err := in[0].Get(i)
+			vec, err := Processers(in).Get(i)
 			if err == ErrOOB {
 				return max, nil
 			}
@@ -436,17 +408,16 @@ func MaxWin() Processer {
 	})
 }
 
-// Mean returns the mean vector elementwise on a single input stream. Iterates over all the vectors
-// of the input stream.
+// Mean returns the mean vector of the input stream.
 //         N-1
 //  mean = sum in_frame[i] where mean and in_frame are vectors.
 //         i=0
 func Mean() Processer {
-	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
+	return NewOneProc(func(in ...Processer) (Value, error) {
 		var mean *narray.NArray
 		var i int
 		for {
-			vec, err := in[0].Get(i)
+			vec, err := Processers(in).Get(i)
 			if err == ErrOOB {
 				return narray.Scale(mean, mean, 1/float64(i)), nil
 			}
@@ -462,17 +433,18 @@ func Mean() Processer {
 	})
 }
 
-// MSE returns the mean squared error between two inputs.
+// MSE returns the mean squared error of two inputs.
 func MSE() Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		if len(in) != 2 {
-			return nil, fmt.Errorf("proc MSE needs 2 inputs got %d", len(in))
+		framers, err := Processers(in).CheckInputs(2)
+		if err != nil {
+			return nil, err
 		}
-		vec0, e0 := in[0].Get(idx)
+		vec0, e0 := framers[0].Get(idx)
 		if e0 != nil {
 			return nil, e0
 		}
-		vec1, e1 := in[1].Get(idx)
+		vec1, e1 := framers[1].Get(idx)
 		if e1 != nil {
 			return nil, e1
 		}

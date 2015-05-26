@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/akualab/dsp"
+	"github.com/akualab/dsp/speech"
 	"github.com/akualab/dsp/wav"
 )
 
@@ -30,7 +31,7 @@ func main() {
 	out := app.Chain(
 		app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize)),
 		app.Add("log_filterbank", dsp.Log()),
-		app.Add("filterbank", dsp.Filterbank(dsp.MelFilterbankIndices, dsp.MelFilterbankCoefficients)),
+		app.Add("filterbank", dsp.Filterbank(speech.MelFilterbankIndices, speech.MelFilterbankCoefficients)),
 		app.Add("spectral_energy", dsp.SpectralEnergy(logFFTSize)),
 		app.Add("window", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, false)),
 		app.Add("wav", wavSource),

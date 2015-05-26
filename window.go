@@ -77,7 +77,7 @@ func (win *WindowProc) Get(idx int) (Value, error) {
 	if ok {
 		return val, nil
 	}
-	vec, err := win.inputs[0].Get(0)
+	vec, err := win.inputs[0].(Framer).Get(0)
 	if err != nil {
 		return nil, err
 	}

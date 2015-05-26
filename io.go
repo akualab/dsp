@@ -30,7 +30,7 @@ const (
 // for debugging.
 func WriteValues(writer io.Writer, on bool) Processer {
 	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		v, err := in[0].Get(idx)
+		v, err := Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}
