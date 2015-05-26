@@ -9,7 +9,7 @@ import (
 	narray "github.com/akualab/narray/na64"
 )
 
-func ExampleApp_Spectrum() {
+func ExampleApp_spectrum() {
 
 	app := dsp.NewApp("Example App")
 
@@ -56,7 +56,7 @@ func ExampleApp_Spectrum() {
 }
 
 // Calculate Fibonacci values.
-func ExampleApp_Fibonacci() {
+func ExampleApp_fibonacci() {
 	app := dsp.NewApp("Fibonacci")
 	fibo := app.Add("Fibo", Fibo(11))
 
@@ -73,7 +73,7 @@ func ExampleApp_Fibonacci() {
 }
 
 // Subtract a value "fm" from a Fibonacci series so the sum adds up to zero.
-func ExampleOneValuer_ZMFibonacci() {
+func ExampleOneValuer_zmFibonacci() {
 	app := dsp.NewApp("Fibonacci")
 	fibo := app.Add("Fibo", Fibo(11))
 
