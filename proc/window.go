@@ -3,12 +3,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package dsp
+package proc
 
 import (
 	"fmt"
 	"math"
 
+	"github.com/akualab/dsp"
 	narray "github.com/akualab/narray/na64"
 )
 
@@ -30,9 +31,9 @@ type WindowProc struct {
 	WindowType int
 	data       []float64
 	err        error
-	inputs     []Processer
+	inputs     []dsp.Processer
 	Centered   bool
-	*Proc
+	*dsp.Proc
 }
 
 // NewWindowProc returns a windowing processor.
@@ -43,7 +44,7 @@ func NewWindowProc(stepSize, winSize, windowType int, centered bool) *WindowProc
 		WinSize:    winSize,
 		WindowType: windowType,
 		Centered:   centered,
-		Proc:       NewProc(defaultBufSize, nil),
+		Proc:       dsp.NewProc(defaultBufSize, nil),
 	}
 
 	win.WindowType = windowType
@@ -64,23 +65,24 @@ func NewWindowProc(stepSize, winSize, windowType int, centered bool) *WindowProc
 }
 
 // SetInputs for this processor.
-func (win *WindowProc) SetInputs(in ...Processer) {
+func (win *WindowProc) SetInputs(in ...dsp.Processer) {
 	win.inputs = in
 }
 
 // Get implements the dsp.Processer interface.
-func (win *WindowProc) Get(idx int) (Value, error) {
+func (win *WindowProc) Get(idx int) (dsp.Value, error) {
 	if idx < 0 {
-		return nil, ErrOOB
+		return nil, dsp.ErrOOB
 	}
 	val, ok := win.GetCache(idx)
 	if ok {
 		return val, nil
 	}
-	vec, err := win.inputs[0].(Framer).Get(0)
+	vv, err := win.inputs[0].(dsp.Framer).Get(0)
 	if err != nil {
 		return nil, err
 	}
+	vec := vv.(*narray.NArray)
 	inSize := vec.Shape[0]
 	ss := win.StepSize
 	ws := win.WinSize
@@ -97,7 +99,7 @@ func (win *WindowProc) Get(idx int) (Value, error) {
 	}
 	pu := pq + ws
 	if pu > inSize {
-		return nil, ErrOOB
+		return nil, dsp.ErrOOB
 	}
 	var i int
 	if pq < 0 {

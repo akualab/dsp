@@ -19,7 +19,12 @@ var ErrNoFunc = errors.New("no ProcFunc set")
 // Returned when frame index is out of bounds. Can be used as a termination flag.
 var ErrOOB = errors.New("frame index out of bounds")
 
-// The Processer interface is the common pnterface for all processors.
+// The Value interface must be implemented by types that are exchanged by processors.
+type Value interface {
+	//	Copy() Value
+}
+
+// The Processer interface is the common interface for all processors types.
 type Processer interface {
 }
 

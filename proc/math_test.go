@@ -1,4 +1,4 @@
-package dsp
+package proc
 
 import "testing"
 
@@ -30,7 +30,7 @@ func TestRealFT(t *testing.T) {
 
 	RealFT(data, 16, true)
 
-	CompareSliceFloat(t, expected, data, "no match", 0.05)
+	compareSliceFloat(t, expected, data, "no match", 0.05)
 }
 
 /*
@@ -58,7 +58,7 @@ func TestDFTEnergy(t *testing.T) {
 
 	expected := []float64{2.25, 2.17, 1.96, 1.63, 1.25, 0.87, 0.54, 0.33}
 
-	CompareSliceFloat(t, expected, energy, "no match", 0.05)
+	compareSliceFloat(t, expected, energy, "no match", 0.05)
 
 }
 

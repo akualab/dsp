@@ -1,20 +1,25 @@
 package wav
 
 import (
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/akualab/dsp"
+	"github.com/akualab/dsp/proc"
+	narray "github.com/akualab/narray/na64"
 )
+
+var dir = "../../data"
 
 func TestJSONStreamer(t *testing.T) {
 
 	ref := map[string]bool{"wav1": true, "wav2": true}
 	ids := []string{}
-	iter, err := NewIterator("../data", 8000, 2, 2)
+	iter, err := NewIterator(dir, 8000, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log("XXX", iter)
 	i := 0
 	for ; ; i++ {
 		w, e := iter.Next()
@@ -26,7 +31,6 @@ func TestJSONStreamer(t *testing.T) {
 		}
 		ids = append(ids, w.ID)
 		nf := iter.NumFrames()
-		t.Log("XXX", iter, nf, w.ID)
 		t.Log(i, "wav:", w.ID, "num_frames:", nf)
 		if nf != len(w.Samples)/2 {
 			t.Fatalf("num frames mismatch - expected %d, got %d", len(w.Samples)/2, nf)
@@ -53,7 +57,7 @@ func TestBounds(t *testing.T) {
 
 	ref := map[string]bool{"wav1": true, "wav2": true}
 	ids := []string{}
-	iter, err := NewIterator("../data", 8000, 2, 2)
+	iter, err := NewIterator(dir, 8000, 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,4 +104,50 @@ func TestBounds(t *testing.T) {
 			t.Fatalf("bad id %s", v)
 		}
 	}
+}
+
+func ExampleNewSourceProc_spectrum() {
+
+	app := dsp.NewApp("Example App")
+
+	// Read a waveform.
+	path := filepath.Join(dir, "wav1.json.gz")
+	wavSource, err := NewSourceProc(path, Fs(8000))
+	if err != nil {
+		panic(err)
+	}
+
+	// Add the source processor responsible for reading and supplying waveform samples.
+	wav := app.Add("wav", wavSource)
+
+	// Use a windowing processor to segment the waveform into frames of 80 samples
+	// and apply a Hamming window of size 205. The last arg is to instruct the processor
+	// to center the frame in the middle of the window.
+	window := app.Add("window", proc.NewWindowProc(80, 205, proc.Hamming, true))
+
+	// Compute the FFT of the windowed frame. The FFT size is 2**8.
+	spectrum := app.Add("spectrum", proc.SpectralEnergy(8))
+
+	// Connect the processors.
+	// wav -> window -> spectrum
+	app.Connect(window, wav)
+	app.Connect(spectrum, window)
+
+	// Get features using this object.
+	out := spectrum
+
+	// Get the next waveform. (This processor is designed to read a list of
+	// files. The Next() method loads the next waveform in the list.)
+	wavSource.Next()
+
+	// Get the spectrum for frame #10.
+	v, e := out.Get(10)
+	if e != nil {
+		panic(e)
+	}
+
+	// Print first element of the FFT for frame #10.
+	fmt.Println(v.(*narray.NArray).Data[0])
+	// Output:
+	// 5.123420120893221e-05
 }

@@ -11,7 +11,8 @@ package speech
 
 import (
 	"github.com/akualab/dsp"
-	"github.com/akualab/dsp/wav"
+	"github.com/akualab/dsp/proc"
+	"github.com/akualab/dsp/proc/wav"
 )
 
 // Config parameters for speech feature extractor.
@@ -59,63 +60,63 @@ func New(name string, source *wav.SourceProc, c Config) (*dsp.App, error) {
 		c.Features = DefaultFeatures
 	}
 	app := dsp.NewApp(name)
-	indices, coeff := dsp.GenerateFilterbank(1<<uint(c.LogFFTSize), c.FBSize, c.FS, c.FBMinFreq, c.FBMaxFreq)
+	indices, coeff := proc.GenerateFilterbank(1<<uint(c.LogFFTSize), c.FBSize, c.FS, c.FBMinFreq, c.FBMaxFreq)
 
 	cep := app.Chain(
-		app.Add("cepstrum", dsp.DCT(c.FBSize, c.CepSize)),
-		app.Add("log filterbank", dsp.Log()),
-		app.Add("filterbank", dsp.Filterbank(indices, coeff)),
-		app.Add("spectrum", dsp.SpectralEnergy(c.LogFFTSize)),
-		app.Add("windowed", dsp.NewWindowProc(c.WinStep, c.WinSize, c.WinType, true)),
+		app.Add("cepstrum", proc.DCT(c.FBSize, c.CepSize)),
+		app.Add("log filterbank", proc.Log()),
+		app.Add("filterbank", proc.Filterbank(indices, coeff)),
+		app.Add("spectrum", proc.SpectralEnergy(c.LogFFTSize)),
+		app.Add("windowed", proc.NewWindowProc(c.WinStep, c.WinSize, c.WinType, true)),
 		app.Add("wav", source),
 	)
 
 	meanCep := app.Connect(
-		app.Add("mean cepstrum", dsp.Mean()),
+		app.Add("mean cepstrum", proc.Mean()),
 		cep,
 	)
 
 	zmCep := app.Connect(
-		app.Add("zm cepstrum", dsp.Sub()),
+		app.Add("zm cepstrum", proc.Sub()),
 		cep,
 		meanCep,
 	)
 
 	// Energy features.
 	egy := app.Connect(
-		app.Add("cepstral energy", dsp.Sum()),
+		app.Add("cepstral energy", proc.Sum()),
 		app.NodeByName("log filterbank"),
 	)
 
 	maxEgy := app.Connect(
-		app.Add("max cepstral energy", dsp.MaxWin()),
+		app.Add("max cepstral energy", proc.MaxWin()),
 		egy,
 	)
 
 	// Subtract max energy from energy.
 	normEgy := app.Connect(
-		app.Add("normalized cepstral energy", dsp.Sub()),
+		app.Add("normalized cepstral energy", proc.Sub()),
 		egy,
 		maxEgy,
 	)
 
 	// Delta cepstrum features.
 	dCep := app.Connect(
-		app.Add("delta cepstrum", dsp.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff)),
+		app.Add("delta cepstrum", proc.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff)),
 		zmCep,
 	)
 	app.Connect(
-		app.Add("delta delta cepstrum", dsp.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff)),
+		app.Add("delta delta cepstrum", proc.NewDiffProc(c.CepSize, c.BufSize, c.DeltaCoeff)),
 		dCep,
 	)
 
 	// Delta energy features.
 	dEgy := app.Connect(
-		app.Add("delta energy", dsp.NewDiffProc(1, c.BufSize, c.DeltaCoeff)),
+		app.Add("delta energy", proc.NewDiffProc(1, c.BufSize, c.DeltaCoeff)),
 		normEgy,
 	)
 	app.Connect(
-		app.Add("delta delta energy", dsp.NewDiffProc(1, c.BufSize, c.DeltaCoeff)),
+		app.Add("delta delta energy", proc.NewDiffProc(1, c.BufSize, c.DeltaCoeff)),
 		dEgy,
 	)
 
@@ -125,7 +126,7 @@ func New(name string, source *wav.SourceProc, c Config) (*dsp.App, error) {
 		return nil, err
 	}
 	app.Connect(
-		app.Add("combined", dsp.Join()),
+		app.Add("combined", proc.Join()),
 		nodes...,
 	)
 	return app, nil
