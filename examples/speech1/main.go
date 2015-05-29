@@ -4,8 +4,10 @@ import (
 	"log"
 
 	"github.com/akualab/dsp"
-	"github.com/akualab/dsp/speech"
-	"github.com/akualab/dsp/wav"
+	"github.com/akualab/dsp/proc"
+	"github.com/akualab/dsp/proc/speech"
+	"github.com/akualab/dsp/proc/wav"
+	narray "github.com/akualab/narray/na64"
 )
 
 /* Configuration parameters. */
@@ -29,11 +31,11 @@ func main() {
 	}
 
 	out := app.Chain(
-		app.Add("cepstrum", dsp.DCT(filterbankSize, cepstrumSize)),
-		app.Add("log_filterbank", dsp.Log()),
-		app.Add("filterbank", dsp.Filterbank(speech.MelFilterbankIndices, speech.MelFilterbankCoefficients)),
-		app.Add("spectral_energy", dsp.SpectralEnergy(logFFTSize)),
-		app.Add("window", dsp.NewWindowProc(windowStep, windowSize, dsp.Hamming, false)),
+		app.Add("cepstrum", proc.DCT(filterbankSize, cepstrumSize)),
+		app.Add("log_filterbank", proc.Log()),
+		app.Add("filterbank", proc.Filterbank(speech.MelFilterbankIndices, speech.MelFilterbankCoefficients)),
+		app.Add("spectral_energy", proc.SpectralEnergy(logFFTSize)),
+		app.Add("window", proc.NewWindowProc(windowStep, windowSize, proc.Hamming, false)),
 		app.Add("wav", wavSource),
 	)
 
@@ -63,7 +65,7 @@ func main() {
 			if e != nil {
 				log.Fatal(e)
 			}
-			log.Printf("feature: cepstrum, frame: %d, data: %v", i, v.Data)
+			log.Printf("feature: cepstrum, frame: %d, data: %v", i, v.(*narray.NArray).Data)
 		}
 	}
 }

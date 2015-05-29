@@ -3,12 +3,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package dsp
+package proc
 
 import (
 	"bufio"
 	"fmt"
 	"io"
+
+	"github.com/akualab/dsp"
 )
 
 type ValueType int
@@ -28,9 +30,9 @@ const (
 // writer; and in addition it emits v.  Therefore WriteValues()
 // can be used like the "tee" command, which can often be useful
 // for debugging.
-func WriteValues(writer io.Writer, on bool) Processer {
-	return NewProc(defaultBufSize, func(idx int, in ...Processer) (Value, error) {
-		v, err := Processers(in).Get(idx)
+func WriteValues(writer io.Writer, on bool) dsp.Processer {
+	return dsp.NewProc(defaultBufSize, func(idx int, in ...dsp.Processer) (dsp.Value, error) {
+		v, err := dsp.Processers(in).Get(idx)
 		if err != nil {
 			return nil, err
 		}

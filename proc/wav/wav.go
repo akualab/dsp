@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/akualab/dsp"
+	"github.com/akualab/dsp/proc"
 	"github.com/akualab/ju"
 	narray "github.com/akualab/narray/na64"
 )
@@ -190,7 +191,7 @@ func NewSourceProc(path string, options ...optSourceProc) (*SourceProc, error) {
 	s.Proc = dsp.NewProc(s.bufSize, nil)
 
 	if s.winType > 0 {
-		s.winData, err = dsp.WindowSlice(s.winType, s.frameSize)
+		s.winData, err = proc.WindowSlice(s.winType, s.frameSize)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +210,7 @@ func (src *SourceProc) Rewind(start, end, frameSize, stepSize int, winType int) 
 	}
 
 	src.iter.winType = winType
-	src.iter.winData, err = dsp.WindowSlice(winType, frameSize)
+	src.iter.winData, err = proc.WindowSlice(winType, frameSize)
 	if err != nil {
 		return err
 	}
@@ -272,21 +273,22 @@ func (src *SourceProc) Get(idx int) (dsp.Value, error) {
 	if src.iter.frameSize == 0 {
 		return in, nil
 	}
-	inSize := in.Shape[0]
+	na := in.(*narray.NArray)
+	inSize := na.Shape[0]
 	if src.iter.frameSize > inSize {
 		return nil, fmt.Errorf("window size [%d] is larger than input vector size [%d]", src.iter.frameSize, inSize)
 	}
 	v := narray.New(inSize)
 	if src.iter.winType > 0 {
 		for i, w := range src.iter.winData {
-			v.Data[i] = in.Data[i] * w
+			v.Data[i] = na.Data[i] * w
 		}
 	} else {
-		copy(v.Data, in.Data)
+		copy(v.Data, na.Data)
 	}
 	// Zero padding.
 	for i := src.iter.frameSize; i < inSize; i++ {
-		in.Data[i] = 0
+		na.Data[i] = 0
 	}
 	return v, nil
 }
