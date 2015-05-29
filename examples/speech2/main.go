@@ -6,8 +6,10 @@ import (
 	"log"
 
 	"github.com/akualab/dsp"
-	"github.com/akualab/dsp/speech"
-	"github.com/akualab/dsp/wav"
+	"github.com/akualab/dsp/proc"
+	"github.com/akualab/dsp/proc/speech"
+	"github.com/akualab/dsp/proc/wav"
+	narray "github.com/akualab/narray/na64"
 )
 
 /* Configuration parameters. */
@@ -38,7 +40,7 @@ func main() {
 		BufSize:    100,
 		WinSize:    205,
 		WinStep:    80,
-		WinType:    dsp.Hamming,
+		WinType:    proc.Hamming,
 		LogFFTSize: 8,
 		FBSize:     18,
 		FBMinFreq:  10,
@@ -83,7 +85,7 @@ func main() {
 			if e != nil {
 				log.Fatal(e)
 			}
-			log.Printf("feature: %s, frame: %d, data: %v", out.Name(), i, v.Data)
+			log.Printf("feature: %s, frame: %d, data: %v", out.Name(), i, v.(*narray.NArray).Data)
 		}
 	}
 }
